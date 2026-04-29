@@ -7,11 +7,11 @@ from pathlib import Path
 
 import click
 import httpx
-from agentdojo.attacks.attack_registry import load_attack
 from agentdojo.benchmark import SuiteResults
 from agentdojo.task_suite.task_suite import TaskSuite
 
 from midojo.agent_client import A2AAgentClient, AgentClient, SimpleHTTPAgentClient
+from midojo.attack import create_attack
 from midojo.suites import get_suite
 
 
@@ -74,7 +74,11 @@ async def run_benchmark(
             utility_results[(ut_id, "")] = result["utility"]
             click.echo(f"  utility={result['utility']}")
     else:
-        attack = load_attack(attack_name, suite, None)  # type: ignore
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.get(f"{control_url}/admin/injection-candidates")
+            resp.raise_for_status()
+            candidates = resp.json()
+        attack = create_attack(attack_name, suite, candidates)
         for ut_id in user_tasks_to_run:
             user_task = suite.user_tasks[ut_id]
             for it_id in injection_tasks_to_run:
