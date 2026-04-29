@@ -5,13 +5,21 @@ A minimal A2A-compliant agent that:
 2. Connects to midojo's MCP server for tool access
 3. Uses an OpenAI-compatible LLM (via LiteLLM) for reasoning
 4. Speaks the A2A JSON-RPC protocol for task handling
+
+Usage::
+
+    # With explicit flags
+    weather-agent --litellm-api-key=xxx --litellm-api-url=yyy --litellm-model=zzz
+
+    # With env vars (via dotenv run or exported)
+    dotenv run -- weather-agent
 """
 
 from __future__ import annotations
 
 import json
-import os
 
+import click
 import uvicorn
 from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.events import EventQueue
@@ -28,23 +36,12 @@ from a2a.types import (
     Part,
     Role,
 )
-from dotenv import load_dotenv
 from mcp.client.session import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
 from openai import OpenAI
 from starlette.applications import Starlette
 
 from midojo.suites.weather import SYSTEM_MESSAGE
-
-load_dotenv()
-
-LITELLM_API_KEY = os.environ["LITELLM_API_KEY"]
-LITELLM_API_URL = os.environ["LITELLM_API_URL"]
-LITELLM_MODEL = os.environ["LITELLM_MODEL"]
-MCP_SERVER_URL = os.environ.get("MCP_SERVER_URL", "http://localhost:8080/mcp")
-AGENT_PORT = int(os.environ.get("AGENT_PORT", "8000"))
-
-llm = OpenAI(api_key=LITELLM_API_KEY, base_url=LITELLM_API_URL)
 
 
 def mcp_tools_to_openai(mcp_tools: list) -> list[dict]:
@@ -64,9 +61,9 @@ def mcp_tools_to_openai(mcp_tools: list) -> list[dict]:
     return openai_tools
 
 
-async def run_agent_loop(prompt: str) -> str:
+async def run_agent_loop(prompt: str, llm: OpenAI, model: str, mcp_server_url: str) -> str:
     """Connect to MCP, discover tools, run tool-use loop with LLM."""
-    async with streamablehttp_client(MCP_SERVER_URL) as (read_stream, write_stream, _):
+    async with streamablehttp_client(mcp_server_url) as (read_stream, write_stream, _):
         async with ClientSession(read_stream, write_stream) as session:
             await session.initialize()
 
@@ -80,7 +77,7 @@ async def run_agent_loop(prompt: str) -> str:
 
             for _ in range(10):
                 response = llm.chat.completions.create(
-                    model=LITELLM_MODEL,
+                    model=model,
                     messages=messages,
                     tools=openai_tools if openai_tools else None,
                 )
@@ -115,6 +112,11 @@ async def run_agent_loop(prompt: str) -> str:
 
 
 class WeatherAgentExecutor(AgentExecutor):
+    def __init__(self, llm: OpenAI, model: str, mcp_server_url: str) -> None:
+        self.llm = llm
+        self.model = model
+        self.mcp_server_url = mcp_server_url
+
     async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
         user_message = context.message
         prompt = ""
@@ -122,7 +124,7 @@ class WeatherAgentExecutor(AgentExecutor):
             prompt = user_message.parts[0].text
 
         print(f"Received prompt: {prompt[:100]}...")
-        response_text = await run_agent_loop(prompt)
+        response_text = await run_agent_loop(prompt, self.llm, self.model, self.mcp_server_url)
         print(f"Response: {response_text[:100]}...")
 
         await event_queue.enqueue_event(Message(role=Role.ROLE_AGENT, parts=[Part(text=response_text)]))
@@ -139,38 +141,49 @@ weather_skill = AgentSkill(
     examples=["What's the weather in New York?", "Which city is warmest?"],
 )
 
-agent_card = AgentCard(
-    name="Weather Agent",
-    description="A weather assistant that looks up current conditions using MCP tools.",
-    version="1.0.0",
-    supported_interfaces=[
-        AgentInterface(url=f"http://localhost:{AGENT_PORT}/", protocol_binding="JSONRPC"),
-    ],
-    default_input_modes=["text/plain"],
-    default_output_modes=["text/plain"],
-    capabilities=AgentCapabilities(streaming=True),
-    skills=[weather_skill],
-)
 
-request_handler = DefaultRequestHandler(
-    agent_executor=WeatherAgentExecutor(),
-    task_store=InMemoryTaskStore(),
-    agent_card=agent_card,
-)
+@click.command()
+@click.option("--host", default="127.0.0.1", help="Host to bind to.")
+@click.option("--port", default=8000, type=int, help="Port to bind to.", envvar="AGENT_PORT")
+@click.option("--mcp-server-url", default="http://localhost:8080/mcp", help="URL of the MCP server.", envvar="MCP_SERVER_URL")
+@click.option("--litellm-api-key", required=True, help="LiteLLM API key.", envvar="LITELLM_API_KEY")
+@click.option("--litellm-api-url", required=True, help="LiteLLM API URL.", envvar="LITELLM_API_URL")
+@click.option("--litellm-model", required=True, help="LiteLLM model name.", envvar="LITELLM_MODEL")
+def main(host: str, port: int, mcp_server_url: str, litellm_api_key: str, litellm_api_url: str, litellm_model: str) -> None:
+    llm = OpenAI(api_key=litellm_api_key, base_url=litellm_api_url)
 
-routes = []
-routes.extend(create_agent_card_routes(agent_card))
-routes.extend(create_jsonrpc_routes(request_handler, "/"))
+    executor = WeatherAgentExecutor(llm, litellm_model, mcp_server_url)
 
-app = Starlette(routes=routes)
+    agent_card = AgentCard(
+        name="Weather Agent",
+        description="A weather assistant that looks up current conditions using MCP tools.",
+        version="1.0.0",
+        supported_interfaces=[
+            AgentInterface(url=f"http://localhost:{port}/", protocol_binding="JSONRPC"),
+        ],
+        default_input_modes=["text/plain"],
+        default_output_modes=["text/plain"],
+        capabilities=AgentCapabilities(streaming=True),
+        skills=[weather_skill],
+    )
 
+    request_handler = DefaultRequestHandler(
+        agent_executor=executor,
+        task_store=InMemoryTaskStore(),
+        agent_card=agent_card,
+    )
 
-def main() -> None:
-    print(f"Starting A2A weather agent on port {AGENT_PORT}")
-    print(f"MCP server: {MCP_SERVER_URL}")
-    print(f"LLM model: {LITELLM_MODEL}")
-    print(f"Agent card: http://localhost:{AGENT_PORT}/.well-known/agent-card.json")
-    uvicorn.run(app, host="127.0.0.1", port=AGENT_PORT)
+    routes = []
+    routes.extend(create_agent_card_routes(agent_card))
+    routes.extend(create_jsonrpc_routes(request_handler, "/"))
+
+    app = Starlette(routes=routes)
+
+    print(f"Starting A2A weather agent on port {port}")
+    print(f"MCP server: {mcp_server_url}")
+    print(f"LLM model: {litellm_model}")
+    print(f"Agent card: http://localhost:{port}/.well-known/agent-card.json")
+    uvicorn.run(app, host=host, port=port)
 
 
 if __name__ == "__main__":

@@ -8,12 +8,12 @@ dependencies = [
     "pydantic>=2.7.1",
     "pyyaml>=6.0.1",
     "click>=8.1.7",
-    "python-dotenv>=1.0.0",
     "fastmcp",
     "fastapi>=0.115",
     "uvicorn>=0.34",
     "httpx>=0.28",
     "a2a-sdk>=1.0",
+    "openai>=1.0",
     "protobuf>=5.29,<6",
 ]
 
@@ -26,6 +26,7 @@ dev = [
     "pytest-asyncio>=0.24",
     "ruff>=0.3.0",
     "pyright>=1.1.362",
+    "python-dotenv[cli]>=1.0.0",
 ]
 
 [project.scripts]
