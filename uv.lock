@@ -1409,9 +1409,9 @@ dependencies = [
     { name = "fastapi" },
     { name = "fastmcp" },
     { name = "httpx" },
+    { name = "openai" },
     { name = "protobuf" },
     { name = "pydantic" },
-    { name = "python-dotenv" },
     { name = "pyyaml" },
     { name = "uvicorn" },
 ]
@@ -1421,6 +1421,7 @@ dev = [
     { name = "pyright" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
+    { name = "python-dotenv", extra = ["cli"] },
     { name = "ruff" },
 ]
 
@@ -1432,12 +1433,13 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.115" },
     { name = "fastmcp" },
     { name = "httpx", specifier = ">=0.28" },
+    { name = "openai", specifier = ">=1.0" },
     { name = "protobuf", specifier = ">=5.29,<6" },
     { name = "pydantic", specifier = ">=2.7.1" },
     { name = "pyright", marker = "extra == 'dev'", specifier = ">=1.1.362" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.2" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.24" },
-    { name = "python-dotenv", specifier = ">=1.0.0" },
+    { name = "python-dotenv", extras = ["cli"], marker = "extra == 'dev'", specifier = ">=1.0.0" },
     { name = "pyyaml", specifier = ">=6.0.1" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.3.0" },
     { name = "uvicorn", specifier = ">=0.34" },
@@ -2006,6 +2008,11 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/82/ed/0301aeeac3e5353ef3d94b6ec08bbcabd04a72018415dcb29e588514bba8/python_dotenv-1.2.2.tar.gz", hash = "sha256:2c371a91fbd7ba082c2c1dc1f8bf89ca22564a087c2c287cd9b662adde799cf3", size = 50135, upload-time = "2026-03-01T16:00:26.196Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/0b/d7/1959b9648791274998a9c3526f6d0ec8fd2233e4d4acce81bbae76b44b2a/python_dotenv-1.2.2-py3-none-any.whl", hash = "sha256:1d8214789a24de455a8b8bd8ae6fe3c6b69a5e3d64aa8a8e5d68e694bbcb285a", size = 22101, upload-time = "2026-03-01T16:00:25.09Z" },
+]
+
+[package.optional-dependencies]
+cli = [
+    { name = "click" },
 ]
 
 [[package]]

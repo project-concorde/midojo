@@ -60,7 +60,7 @@ midojo-orchestrate --agent-url http://agent:8000 --suite weather
 - `app/routers/tasks.py` — FastAPI router with `/task/setup`, `/task/status`, `/task/prompt`, `/task/complete`, `/task/trace`, `/task/grade` endpoints.
 - `app/models.py` — `BenchmarkSession[Env]`, `SessionHolder`, `TraceEntry`, request/response models.
 - `grading.py` — `grade_task()` wrapping TaskSuite's `_check_task_result()` for utility and security evaluation. Generic over `TaskEnvironment`.
-- `serve.py` — combines MCP server (streamable HTTP at `/mcp`) and FastAPI control plane into one Starlette app. Requires `--suite` and `--real-mcp-url`.
+- `serve.py` — combines MCP server (streamable HTTP at `/mcp`) and FastAPI control plane into one FastAPI app. Requires `--suite` and `--real-mcp-url`.
 - `forwarding.py` — `MCPForwardingClient` (sync `call_tool` wrapping async MCP client), class-level singleton (`initialize()`, `get_instance()`, `is_initialized()`, `_reset()`). Initialized at startup from `--real-mcp-url`.
 - `orchestrator.py` — Click CLI that drives the benchmark matrix against external agents.
 - `agent_client.py` — `AgentClient` ABC with `SimpleHTTPAgentClient` and `A2AAgentClient` implementations.
