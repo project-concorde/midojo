@@ -15,6 +15,7 @@ dependencies = [
     "a2a-sdk>=1.0",
     "openai>=1.0",
     "protobuf>=5.29,<6",
+    "rich>=13.0",
 ]
 
 [tool.uv.sources]
