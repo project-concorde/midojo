@@ -1,4 +1,4 @@
-# midojo
+# MiDojo
 
 Man-in-the-middle red teaming for AI agents, built on [AgentDojo](https://github.com/ethz-spylab/agentdojo). Test whether agents resist prompt injections planted across their operating environment — starting with [MCP](https://modelcontextprotocol.io) tool responses.
 
