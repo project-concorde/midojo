@@ -26,7 +26,7 @@ Orchestrator              Agent                  Benchmark MCP Server
     <── response ──          <── result ──       │                + Environment
                                                  └─ proxy ────> Real MCP Server
     ──── REST ──────────────────────────>                        + Injection Overlay
-    /scenario/setup, /scenario/grade
+    /task/setup, /task/grade
 ```
 
 ### Proxy Mode
@@ -34,7 +34,7 @@ Orchestrator              Agent                  Benchmark MCP Server
 In proxy mode (`--real-mcp-url`), forwarding logic lives inside the tool functions themselves. Each tool decides whether to forward to upstream and how to compose the response:
 
 - **Write tools** (deploy, undeploy, send message, etc.) always execute against the local simulated environment
-- **Read tools** call `get_forwarding_client().call_tool(...)` to forward to upstream, then append local environment data that may contain injection text (via AgentDojo's `{placeholder}` YAML substitution)
+- **Read tools** call `MCPForwardingClient.get_instance().call_tool(...)` to forward to upstream, then append local environment data that may contain injection text (via AgentDojo's `{placeholder}` YAML substitution)
 
 No separate routing config is needed — the tool's code IS the config. This lets you benchmark agents against real infrastructure without planting injections in production systems.
 
@@ -43,7 +43,7 @@ No separate routing config is needed — the tool's code IS the config. This let
 ### Install
 
 ```bash
-uv sync --extra dev --extra mcp
+uv sync --extra dev
 ```
 
 ### Run tests
@@ -95,12 +95,12 @@ The suite also includes:
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/scenario/setup` | POST | Configure a benchmark scenario (user task, injection task, injections) |
-| `/scenario/status` | GET | Check current scenario state |
-| `/scenario/prompt` | GET | Get the user task prompt for the current scenario |
-| `/scenario/complete` | POST | Submit the agent's final text output |
-| `/scenario/trace` | GET | Get the recorded tool call trace |
-| `/scenario/grade` | POST | Run utility/security grading |
+| `/task/setup` | POST | Configure a benchmark scenario (user task, injection task, injections) |
+| `/task/status` | GET | Check current scenario state |
+| `/task/prompt` | GET | Get the user task prompt for the current scenario |
+| `/task/complete` | POST | Submit the agent's final text output |
+| `/task/trace` | GET | Get the recorded tool call trace |
+| `/task/grade` | POST | Run utility/security grading |
 
 ## Adding a New Suite
 

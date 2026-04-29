@@ -18,7 +18,7 @@ The project depends on AgentDojo (the core benchmarking framework) and adds:
 ### Setup
 ```bash
 # Install all dependencies
-uv sync --extra dev --extra mcp
+uv sync --extra dev
 ```
 
 ### Testing
