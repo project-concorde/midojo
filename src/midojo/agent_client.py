@@ -29,7 +29,14 @@ class SimpleHTTPAgentClient(AgentClient):
             resp = await client.post(self.agent_url, json={"prompt": prompt})
             resp.raise_for_status()
             data = resp.json()
-            return data.get("response", data.get("output", data.get("text", str(data))))
+            for key in ("response", "output", "text"):
+                if key in data:
+                    return data[key]
+            raise ValueError(
+                f"Agent response JSON has no recognized key (expected 'response', 'output', or 'text'). "
+                f"Got keys: {list(data.keys())}. Is the agent using the expected protocol? "
+                f"(Use --protocol a2a for A2A agents.)"
+            )
 
 
 class A2AAgentClient(AgentClient):

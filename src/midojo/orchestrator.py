@@ -9,10 +9,99 @@ import click
 import httpx
 from agentdojo.benchmark import SuiteResults
 from agentdojo.task_suite.task_suite import TaskSuite
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
+from rich.text import Text
 
 from midojo.agent_client import A2AAgentClient, AgentClient, SimpleHTTPAgentClient
 from midojo.attack import create_attack
 from midojo.suites import get_suite
+
+console = Console()
+
+def _utility(value: bool) -> Text:
+    return Text("✓ task completed", style="bold green") if value else Text("✗ task not completed", style="bold red")
+
+
+def _security(value: bool) -> Text:
+    if value:
+        return Text("💀 attack succeeded", style="bold red")
+    return Text("🛡️ attack failed", style="bold green")
+
+
+async def _fetch_suite_info(control_url: str) -> dict:
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.get(f"{control_url}/admin/suite")
+        resp.raise_for_status()
+        return resp.json()
+
+
+def _print_banner(
+    suite_name: str,
+    suite_info: dict,
+    attack_name: str | None,
+    agent_url: str,
+    protocol: str,
+    user_tasks_to_run: list[str],
+    injection_tasks_to_run: list[str],
+) -> None:
+    lines = Text()
+    lines.append("Suite       ", style="dim")
+    lines.append(f"{suite_name}\n")
+    lines.append("Attack      ", style="dim")
+    lines.append(f"{attack_name or 'none'}\n")
+    lines.append("Agent       ", style="dim")
+    lines.append(f"{agent_url} ({protocol})\n")
+    lines.append("Tasks       ", style="dim")
+    lines.append(f"{len(user_tasks_to_run)} user x {len(injection_tasks_to_run)} injection\n")
+    lines.append("Tools       ", style="dim")
+    lines.append(f"{', '.join(suite_info['tools'])}\n")
+    lines.append("Vectors     ", style="dim")
+    lines.append(", ".join(suite_info["injection_vectors"].keys()) or "none")
+
+    console.print(Panel(lines, title="midojo orchestrator", border_style="cyan", padding=(1, 2)))
+    console.print()
+
+
+def _print_results_table(
+    utility_results: dict[tuple[str, str], bool],
+    security_results: dict[tuple[str, str], bool],
+    attack_name: str | None,
+    results_file: Path,
+) -> None:
+    table = Table(title="Results", border_style="cyan", show_lines=True)
+    table.add_column("User Task", style="bold")
+    if attack_name:
+        table.add_column("Injection Task")
+    table.add_column("Utility", justify="center")
+    if attack_name:
+        table.add_column("Security", justify="center")
+
+    for (ut_id, it_id), util in utility_results.items():
+        sec = security_results.get((ut_id, it_id))
+        if attack_name:
+            table.add_row(ut_id, it_id, _utility(util), _security(sec) if sec is not None else "")
+        else:
+            table.add_row(ut_id, _utility(util))
+
+    table.add_section()
+    if utility_results:
+        util_avg = f"{sum(utility_results.values()) / len(utility_results) * 100:.1f}%"
+    else:
+        util_avg = "-"
+    if security_results:
+        sec_avg = f"{sum(security_results.values()) / len(security_results) * 100:.1f}%"
+    else:
+        sec_avg = "-"
+
+    if attack_name:
+        table.add_row("", "", Text(util_avg, style="bold"), Text(sec_avg, style="bold"))
+    else:
+        table.add_row("", Text(util_avg, style="bold"))
+
+    console.print(table)
+    console.print(f"\nResults saved to [cyan]{results_file}[/cyan]")
 
 
 async def run_task(
@@ -55,7 +144,10 @@ async def run_task(
 async def run_benchmark(
     control_url: str,
     agent_client: AgentClient,
+    agent_url: str,
+    protocol: str,
     suite: TaskSuite,
+    suite_name: str,
     attack_name: str | None,
     user_task_ids: list[str] | None,
     injection_task_ids: list[str] | None,
@@ -64,15 +156,18 @@ async def run_benchmark(
     user_tasks_to_run = user_task_ids or list(suite.user_tasks.keys())
     injection_tasks_to_run = injection_task_ids or list(suite.injection_tasks.keys())
 
+    suite_info = await _fetch_suite_info(control_url)
+    _print_banner(suite_name, suite_info, attack_name, agent_url, protocol, user_tasks_to_run, injection_tasks_to_run)
+
     utility_results: dict[tuple[str, str], bool] = {}
     security_results: dict[tuple[str, str], bool] = {}
 
     if attack_name is None:
         for ut_id in user_tasks_to_run:
-            click.echo(f"Running {ut_id} (no attack)...")
+            console.print(f"  Running [bold]{ut_id}[/bold] ...", end=" ")
             result = await run_task(control_url, agent_client, ut_id, None, {})
             utility_results[(ut_id, "")] = result["utility"]
-            click.echo(f"  utility={result['utility']}")
+            console.print(_utility(result["utility"]))
     else:
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.get(f"{control_url}/admin/injection-candidates")
@@ -83,12 +178,14 @@ async def run_benchmark(
             user_task = suite.user_tasks[ut_id]
             for it_id in injection_tasks_to_run:
                 injection_task = suite.injection_tasks[it_id]
-                click.echo(f"Running {ut_id} x {it_id} (attack={attack_name})...")
+                console.print(f"  Running [bold]{ut_id}[/bold] x [bold]{it_id}[/bold] ...", end=" ")
                 injections = attack.attack(user_task, injection_task)
                 result = await run_task(control_url, agent_client, ut_id, it_id, injections)
                 utility_results[(ut_id, it_id)] = result["utility"]
                 security_results[(ut_id, it_id)] = result["security"]
-                click.echo(f"  utility={result['utility']}, security={result['security']}")
+                console.print(_utility(result["utility"]), " | ", _security(result["security"]))
+
+    console.print()
 
     logdir.mkdir(parents=True, exist_ok=True)
     results_file = logdir / "results.json"
@@ -101,7 +198,8 @@ async def run_benchmark(
             f,
             indent=2,
         )
-    click.echo(f"Results saved to {results_file}")
+
+    _print_results_table(utility_results, security_results, attack_name, results_file)
 
     return SuiteResults(
         utility_results=utility_results,
@@ -123,7 +221,7 @@ async def run_benchmark(
 @click.option(
     "--module-to-load", "-ml", "modules_to_load", multiple=True, default=(), help="Additional modules to import."
 )
-@click.option("--protocol", type=click.Choice(["http", "a2a"]), default="http", help="Agent communication protocol.")
+@click.option("--protocol", type=click.Choice(["http", "a2a"]), required=True, help="Agent communication protocol.")
 def main(
     control_url: str,
     agent_url: str,
@@ -146,27 +244,20 @@ def main(
     else:
         agent_client = SimpleHTTPAgentClient(agent_url)
 
-    results = asyncio.run(
+    asyncio.run(
         run_benchmark(
             control_url=control_url,
             agent_client=agent_client,
+            agent_url=agent_url,
+            protocol=protocol,
             suite=suite,
+            suite_name=suite_name,
             attack_name=attack_name,
             user_task_ids=list(user_tasks) if user_tasks else None,
             injection_task_ids=list(injection_tasks) if injection_tasks else None,
             logdir=logdir,
         )
     )
-
-    utility = results["utility_results"]
-    if utility:
-        avg = sum(utility.values()) / len(utility)
-        click.echo(f"Average utility: {avg * 100:.1f}%")
-
-    security = results["security_results"]
-    if security:
-        avg = sum(security.values()) / len(security)
-        click.echo(f"Attack success rate: {avg * 100:.1f}%")
 
 
 if __name__ == "__main__":
