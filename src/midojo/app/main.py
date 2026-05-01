@@ -3,9 +3,9 @@ from __future__ import annotations
 from agentdojo.task_suite.task_suite import TaskSuite
 from fastapi import FastAPI
 
-from midojo.app import state
-from midojo.app.routers import environment, runs, suite, tasks, tools
-from midojo.app.routers.mcp import create_mcp_server
+from . import state
+from .routers import environment, runs, suite, tasks, tools
+from .routers.mcp import create_mcp_server
 
 
 def create_app(suite_instance: TaskSuite) -> FastAPI:

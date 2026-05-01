@@ -9,9 +9,10 @@ from agentdojo.functions_runtime import Function
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 
-from midojo.app import state
-from midojo.app.models import TraceEntry
 from midojo.forwarding import MCPForwardingClient
+
+from .. import state
+from ..models import TraceEntry
 
 
 def _make_tool_handler(func: Function):

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from agentdojo.task_suite.task_suite import TaskSuite
 
-from midojo.app.models import Evaluation, Run
+from .models import Evaluation, Run
 
 suite: TaskSuite = None  # type: ignore[assignment]
 runs: dict[str, Run] = {}

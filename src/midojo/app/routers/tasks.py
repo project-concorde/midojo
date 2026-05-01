@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+from typing import Annotated
+
 from agentdojo.agent_pipeline.ground_truth_pipeline import GroundTruthPipeline
 from agentdojo.functions_runtime import FunctionsRuntime
 from agentdojo.task_suite.task_suite import TaskSuite
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 
-from midojo.app.dependencies import Suite
-from midojo.app.models import GroundTruthCall, TaskDetailResponse
+from ..dependencies import get_suite
+from ..models import GroundTruthCall, TaskDetailResponse
 
 router = APIRouter(prefix="/tasks")
 
@@ -38,12 +40,12 @@ def _get_injection_candidates(suite: TaskSuite) -> dict[str, list[str]]:
 
 
 @router.get("/user", status_code=status.HTTP_200_OK)
-def list_user_tasks(suite: Suite) -> list[str]:
+def list_user_tasks(suite: Annotated[TaskSuite, Depends(get_suite)]) -> list[str]:
     return list(suite.user_tasks.keys())
 
 
 @router.get("/user/{task_id}", response_model=TaskDetailResponse, status_code=status.HTTP_200_OK)
-def get_user_task(task_id: str, suite: Suite):
+def get_user_task(task_id: str, suite: Annotated[TaskSuite, Depends(get_suite)]):
     if task_id not in suite.user_tasks:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Unknown user task: {task_id}")
     task = suite.user_tasks[task_id]
@@ -58,12 +60,12 @@ def get_user_task(task_id: str, suite: Suite):
 
 
 @router.get("/injection", status_code=status.HTTP_200_OK)
-def list_injection_tasks(suite: Suite) -> list[str]:
+def list_injection_tasks(suite: Annotated[TaskSuite, Depends(get_suite)]) -> list[str]:
     return list(suite.injection_tasks.keys())
 
 
 @router.get("/injection/{task_id}", response_model=TaskDetailResponse, status_code=status.HTTP_200_OK)
-def get_injection_task(task_id: str, suite: Suite):
+def get_injection_task(task_id: str, suite: Annotated[TaskSuite, Depends(get_suite)]):
     if task_id not in suite.injection_tasks:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Unknown injection task: {task_id}")
     task = suite.injection_tasks[task_id]
@@ -78,5 +80,5 @@ def get_injection_task(task_id: str, suite: Suite):
 
 
 @router.get("/injection-candidates", status_code=status.HTTP_200_OK)
-def injection_candidates(suite: Suite) -> dict[str, list[str]]:
+def injection_candidates(suite: Annotated[TaskSuite, Depends(get_suite)]) -> dict[str, list[str]]:
     return _get_injection_candidates(suite)

@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-from typing import Annotated
-
 from agentdojo.task_suite.task_suite import TaskSuite
-from fastapi import Depends, HTTPException, status
+from fastapi import HTTPException, status
 
-from midojo.app import state
-from midojo.app.models import Evaluation, Run
+from . import state
+from .models import Evaluation, Run
 
 
 def get_suite() -> TaskSuite:
@@ -32,9 +30,3 @@ def get_evaluation(run_id: str, eval_id: str) -> Evaluation:
     if evaluation is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Unknown evaluation: {eval_id}")
     return evaluation
-
-
-Suite = Annotated[TaskSuite, Depends(get_suite)]
-CurrentEval = Annotated[Evaluation, Depends(get_current_eval)]
-CurrentRun = Annotated[Run, Depends(get_run)]
-CurrentEvaluation = Annotated[Evaluation, Depends(get_evaluation)]

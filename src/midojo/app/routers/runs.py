@@ -1,11 +1,16 @@
 from __future__ import annotations
 
-from agentdojo.functions_runtime import FunctionsRuntime
-from fastapi import APIRouter, HTTPException, status
+from typing import Annotated
 
-from midojo.app import state
-from midojo.app.dependencies import CurrentEvaluation, CurrentRun, Suite
-from midojo.app.models import (
+from agentdojo.functions_runtime import FunctionsRuntime
+from agentdojo.task_suite.task_suite import TaskSuite
+from fastapi import APIRouter, Depends, HTTPException, status
+
+from midojo.grading import grade_task
+
+from .. import state
+from ..dependencies import get_evaluation, get_run, get_suite
+from ..models import (
     CompleteRequest,
     CreateEvaluationRequest,
     CreateEvaluationResponse,
@@ -18,7 +23,6 @@ from midojo.app.models import (
     RunResponse,
     _new_id,
 )
-from midojo.grading import grade_task
 
 router = APIRouter(prefix="/runs")
 
@@ -31,7 +35,7 @@ def create_run():
 
 
 @router.get("/{run_id}", response_model=RunResponse, status_code=status.HTTP_200_OK)
-def get_run(run: CurrentRun):
+def retrieve_run(run: Annotated[Run, Depends(get_run)]):
     return RunResponse(
         id=run.id,
         created_at=run.created_at,
@@ -50,7 +54,11 @@ def get_run(run: CurrentRun):
 
 
 @router.post("/{run_id}/evaluations", response_model=CreateEvaluationResponse, status_code=status.HTTP_201_CREATED)
-def create_evaluation(req: CreateEvaluationRequest, run: CurrentRun, suite: Suite):
+def create_evaluation(
+    req: CreateEvaluationRequest,
+    run: Annotated[Run, Depends(get_run)],
+    suite: Annotated[TaskSuite, Depends(get_suite)],
+):
     if req.user_task_id not in suite.user_tasks:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Unknown user task: {req.user_task_id}")
     if req.injection_task_id is not None and req.injection_task_id not in suite.injection_tasks:
@@ -79,7 +87,7 @@ def create_evaluation(req: CreateEvaluationRequest, run: CurrentRun, suite: Suit
 
 
 @router.get("/{run_id}/evaluations/{eval_id}", response_model=EvaluationResponse, status_code=status.HTTP_200_OK)
-def get_evaluation(evaluation: CurrentEvaluation):
+def retrieve_evaluation(evaluation: Annotated[Evaluation, Depends(get_evaluation)]):
     return EvaluationResponse(
         id=evaluation.id,
         user_task_id=evaluation.user_task_id,
@@ -96,14 +104,17 @@ def get_evaluation(evaluation: CurrentEvaluation):
 
 
 @router.post("/{run_id}/evaluations/{eval_id}/complete", status_code=status.HTTP_200_OK)
-def complete_evaluation(req: CompleteRequest, evaluation: CurrentEvaluation):
+def complete_evaluation(req: CompleteRequest, evaluation: Annotated[Evaluation, Depends(get_evaluation)]):
     evaluation.model_output = req.model_output
     evaluation.completed = True
     return {"status": "completed"}
 
 
 @router.post("/{run_id}/evaluations/{eval_id}/grade", response_model=GradeResponse, status_code=status.HTTP_200_OK)
-def grade_evaluation(evaluation: CurrentEvaluation, suite: Suite):
+def grade_evaluation(
+    evaluation: Annotated[Evaluation, Depends(get_evaluation)],
+    suite: Annotated[TaskSuite, Depends(get_suite)],
+):
     if not evaluation.completed:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Evaluation not completed. Call complete first."

@@ -1,15 +1,18 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, status
+from typing import Annotated
 
-from midojo.app.dependencies import Suite
-from midojo.app.models import ToolInfoResponse
+from agentdojo.task_suite.task_suite import TaskSuite
+from fastapi import APIRouter, Depends, status
+
+from ..dependencies import get_suite
+from ..models import ToolInfoResponse
 
 router = APIRouter()
 
 
 @router.get("/tools", response_model=list[ToolInfoResponse], status_code=status.HTTP_200_OK)
-def tools(suite: Suite):
+def tools(suite: Annotated[TaskSuite, Depends(get_suite)]):
     return [
         ToolInfoResponse(
             name=t.name,

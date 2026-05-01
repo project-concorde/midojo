@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from typing import Annotated
+
 import yaml
 from agentdojo.task_suite.task_suite import InjectionVector, TaskSuite, read_suite_file
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Depends, status
 
-from midojo.app.dependencies import Suite
-from midojo.app.models import (
+from ..dependencies import get_suite
+from ..models import (
     CheckResponse,
     InjectionTaskCheckResult,
     InjectionVectorInfo,
@@ -23,7 +25,7 @@ def _get_injection_vectors(suite: TaskSuite) -> dict[str, InjectionVector]:
 
 
 @router.get("", response_model=SuiteInfoResponse, status_code=status.HTTP_200_OK)
-def suite_info(suite: Suite):
+def suite_info(suite: Annotated[TaskSuite, Depends(get_suite)]):
     vectors = _get_injection_vectors(suite)
     return SuiteInfoResponse(
         user_tasks=list(suite.user_tasks.keys()),
@@ -36,7 +38,7 @@ def suite_info(suite: Suite):
 
 
 @router.get("/check", response_model=CheckResponse, status_code=status.HTTP_200_OK)
-def check(suite: Suite):
+def check(suite: Annotated[TaskSuite, Depends(get_suite)]):
     passed, (user_results, injection_results) = suite.check(check_injectable=False)
     return CheckResponse(
         passed=passed,
