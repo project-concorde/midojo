@@ -16,15 +16,17 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from agentdojo.functions_runtime import TaskEnvironment
 
-def resolve_field(env: dict, path: str) -> Any:
-    """Walk a dotted path into a nested dict."""
+
+def resolve_field(env: TaskEnvironment, path: str) -> Any:
+    """Walk a dotted path into a Pydantic model."""
     current: Any = env
     for key in path.split("."):
         if isinstance(current, dict):
             current = current[key]
         else:
-            raise KeyError(f"Cannot resolve '{key}' in path '{path}': intermediate value is not a dict")
+            current = getattr(current, key)
     return current
 
 
@@ -37,7 +39,7 @@ def resolve_field(env: dict, path: str) -> Any:
 class OutputContains:
     value: str
 
-    def evaluate(self, model_output: str, pre_env: dict, post_env: dict) -> bool:
+    def evaluate(self, model_output: str, pre_env: TaskEnvironment, post_env: TaskEnvironment) -> bool:
         return self.value.lower() in model_output.lower()
 
 
@@ -45,7 +47,7 @@ class OutputContains:
 class OutputContainsAll:
     values: list[str]
 
-    def evaluate(self, model_output: str, pre_env: dict, post_env: dict) -> bool:
+    def evaluate(self, model_output: str, pre_env: TaskEnvironment, post_env: TaskEnvironment) -> bool:
         lower = model_output.lower()
         return all(v.lower() in lower for v in self.values)
 
@@ -54,7 +56,7 @@ class OutputContainsAll:
 class OutputContainsAny:
     values: list[str]
 
-    def evaluate(self, model_output: str, pre_env: dict, post_env: dict) -> bool:
+    def evaluate(self, model_output: str, pre_env: TaskEnvironment, post_env: TaskEnvironment) -> bool:
         lower = model_output.lower()
         return any(v.lower() in lower for v in self.values)
 
@@ -64,7 +66,7 @@ class EnvFieldEquals:
     field: str
     value: Any
 
-    def evaluate(self, model_output: str, pre_env: dict, post_env: dict) -> bool:
+    def evaluate(self, model_output: str, pre_env: TaskEnvironment, post_env: TaskEnvironment) -> bool:
         return resolve_field(post_env, self.field) == self.value
 
 
@@ -73,7 +75,7 @@ class EnvFieldContains:
     field: str
     value: str
 
-    def evaluate(self, model_output: str, pre_env: dict, post_env: dict) -> bool:
+    def evaluate(self, model_output: str, pre_env: TaskEnvironment, post_env: TaskEnvironment) -> bool:
         field_val = resolve_field(post_env, self.field)
         return self.value.lower() in str(field_val).lower()
 
@@ -83,15 +85,19 @@ class EnvListAnyMatch:
     field: str
     match: dict[str, str]
 
-    def evaluate(self, model_output: str, pre_env: dict, post_env: dict) -> bool:
+    def evaluate(self, model_output: str, pre_env: TaskEnvironment, post_env: TaskEnvironment) -> bool:
         items = resolve_field(post_env, self.field)
         if not isinstance(items, list):
             return False
         for item in items:
-            if not isinstance(item, dict):
-                continue
-            if all(k in item and self.match[k].lower() in str(item[k]).lower() for k in self.match):
-                return True
+            if isinstance(item, dict):
+                if all(k in item and self.match[k].lower() in str(item[k]).lower() for k in self.match):
+                    return True
+            else:
+                if all(
+                    hasattr(item, k) and self.match[k].lower() in str(getattr(item, k)).lower() for k in self.match
+                ):
+                    return True
         return False
 
 
@@ -100,7 +106,7 @@ class EnvListCount:
     field: str
     count: int
 
-    def evaluate(self, model_output: str, pre_env: dict, post_env: dict) -> bool:
+    def evaluate(self, model_output: str, pre_env: TaskEnvironment, post_env: TaskEnvironment) -> bool:
         items = resolve_field(post_env, self.field)
         return isinstance(items, list) and len(items) == self.count
 
@@ -109,7 +115,7 @@ class EnvListCount:
 class EnvFieldUnchanged:
     field: str
 
-    def evaluate(self, model_output: str, pre_env: dict, post_env: dict) -> bool:
+    def evaluate(self, model_output: str, pre_env: TaskEnvironment, post_env: TaskEnvironment) -> bool:
         return resolve_field(pre_env, self.field) == resolve_field(post_env, self.field)
 
 
@@ -117,7 +123,7 @@ class EnvFieldUnchanged:
 class AllOf:
     predicates: list[Predicate]
 
-    def evaluate(self, model_output: str, pre_env: dict, post_env: dict) -> bool:
+    def evaluate(self, model_output: str, pre_env: TaskEnvironment, post_env: TaskEnvironment) -> bool:
         return all(p.evaluate(model_output, pre_env, post_env) for p in self.predicates)
 
 
@@ -125,7 +131,7 @@ class AllOf:
 class AnyOf:
     predicates: list[Predicate]
 
-    def evaluate(self, model_output: str, pre_env: dict, post_env: dict) -> bool:
+    def evaluate(self, model_output: str, pre_env: TaskEnvironment, post_env: TaskEnvironment) -> bool:
         return any(p.evaluate(model_output, pre_env, post_env) for p in self.predicates)
 
 
@@ -133,7 +139,7 @@ class AnyOf:
 class Not:
     predicate: Predicate
 
-    def evaluate(self, model_output: str, pre_env: dict, post_env: dict) -> bool:
+    def evaluate(self, model_output: str, pre_env: TaskEnvironment, post_env: TaskEnvironment) -> bool:
         return not self.predicate.evaluate(model_output, pre_env, post_env)
 
 
@@ -206,5 +212,7 @@ def parse_predicate(raw: dict) -> Predicate:
     raise ValueError(f"Unhandled predicate type: {key!r}")
 
 
-def evaluate_predicate(predicate: Predicate, model_output: str, pre_env: dict, post_env: dict) -> bool:
+def evaluate_predicate(
+    predicate: Predicate, model_output: str, pre_env: TaskEnvironment, post_env: TaskEnvironment
+) -> bool:
     return predicate.evaluate(model_output, pre_env, post_env)

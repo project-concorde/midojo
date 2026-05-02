@@ -1,4 +1,6 @@
 import pytest
+from agentdojo.functions_runtime import TaskEnvironment
+from pydantic import BaseModel
 
 from midojo.predicates import (
     AllOf,
@@ -16,7 +18,50 @@ from midojo.predicates import (
     parse_predicate,
 )
 
-EMPTY_ENV: dict = {}
+
+class EmptyEnv(TaskEnvironment):
+    pass
+
+
+class CountEnv(TaskEnvironment):
+    count: int = 0
+
+
+class MessageEnv(TaskEnvironment):
+    message: str = ""
+
+
+class Alert(BaseModel):
+    city: str
+    message: str
+
+
+class AlertsEnv(TaskEnvironment):
+    weather_alerts: list[Alert] = []
+
+
+class ItemsEnv(TaskEnvironment):
+    items: list = []
+
+
+class BalanceEnv(TaskEnvironment):
+    balance: int = 0
+
+
+class StatusItemsEnv(TaskEnvironment):
+    status: str = ""
+    items: list = []
+
+
+class CityCondition(BaseModel):
+    condition: str
+
+
+class CitiesEnv(TaskEnvironment):
+    cities: dict[str, CityCondition] = {}
+
+
+EMPTY_ENV = EmptyEnv()
 
 
 class TestOutputContains:
@@ -60,76 +105,76 @@ class TestOutputContainsAny:
 class TestEnvFieldEquals:
     def test_match(self):
         p = EnvFieldEquals(field="count", value=5)
-        assert evaluate_predicate(p, "", {}, {"count": 5})
+        assert evaluate_predicate(p, "", EMPTY_ENV, CountEnv(count=5))
 
     def test_mismatch(self):
         p = EnvFieldEquals(field="count", value=5)
-        assert not evaluate_predicate(p, "", {}, {"count": 3})
+        assert not evaluate_predicate(p, "", EMPTY_ENV, CountEnv(count=3))
 
     def test_dotted_path(self):
         p = EnvFieldEquals(field="cities.New York.condition", value="sunny")
-        env = {"cities": {"New York": {"condition": "sunny"}}}
-        assert evaluate_predicate(p, "", {}, env)
+        env = CitiesEnv(cities={"New York": CityCondition(condition="sunny")})
+        assert evaluate_predicate(p, "", EMPTY_ENV, env)
 
 
 class TestEnvFieldContains:
     def test_substring_match(self):
         p = EnvFieldContains(field="message", value="tornado")
-        assert evaluate_predicate(p, "", {}, {"message": "Severe tornado warning"})
+        assert evaluate_predicate(p, "", EMPTY_ENV, MessageEnv(message="Severe tornado warning"))
 
     def test_case_insensitive(self):
         p = EnvFieldContains(field="message", value="TORNADO")
-        assert evaluate_predicate(p, "", {}, {"message": "severe tornado warning"})
+        assert evaluate_predicate(p, "", EMPTY_ENV, MessageEnv(message="severe tornado warning"))
 
     def test_no_match(self):
         p = EnvFieldContains(field="message", value="earthquake")
-        assert not evaluate_predicate(p, "", {}, {"message": "tornado warning"})
+        assert not evaluate_predicate(p, "", EMPTY_ENV, MessageEnv(message="tornado warning"))
 
 
 class TestEnvListAnyMatch:
     def test_match(self):
         p = EnvListAnyMatch(field="weather_alerts", match={"city": "chicago", "message": "tornado"})
-        env = {"weather_alerts": [{"city": "Chicago", "message": "Severe tornado warning"}]}
-        assert evaluate_predicate(p, "", {}, env)
+        env = AlertsEnv(weather_alerts=[Alert(city="Chicago", message="Severe tornado warning")])
+        assert evaluate_predicate(p, "", EMPTY_ENV, env)
 
     def test_no_match(self):
         p = EnvListAnyMatch(field="weather_alerts", match={"city": "chicago", "message": "tornado"})
-        env = {"weather_alerts": [{"city": "New York", "message": "Heat advisory"}]}
-        assert not evaluate_predicate(p, "", {}, env)
+        env = AlertsEnv(weather_alerts=[Alert(city="New York", message="Heat advisory")])
+        assert not evaluate_predicate(p, "", EMPTY_ENV, env)
 
     def test_empty_list(self):
         p = EnvListAnyMatch(field="weather_alerts", match={"city": "chicago"})
-        env = {"weather_alerts": []}
-        assert not evaluate_predicate(p, "", {}, env)
+        env = AlertsEnv(weather_alerts=[])
+        assert not evaluate_predicate(p, "", EMPTY_ENV, env)
 
     def test_partial_match_fails(self):
         p = EnvListAnyMatch(field="weather_alerts", match={"city": "chicago", "message": "tornado"})
-        env = {"weather_alerts": [{"city": "Chicago", "message": "Heat advisory"}]}
-        assert not evaluate_predicate(p, "", {}, env)
+        env = AlertsEnv(weather_alerts=[Alert(city="Chicago", message="Heat advisory")])
+        assert not evaluate_predicate(p, "", EMPTY_ENV, env)
 
 
 class TestEnvListCount:
     def test_correct_count(self):
         p = EnvListCount(field="items", count=3)
-        assert evaluate_predicate(p, "", {}, {"items": [1, 2, 3]})
+        assert evaluate_predicate(p, "", EMPTY_ENV, ItemsEnv(items=[1, 2, 3]))
 
     def test_wrong_count(self):
         p = EnvListCount(field="items", count=3)
-        assert not evaluate_predicate(p, "", {}, {"items": [1, 2]})
+        assert not evaluate_predicate(p, "", EMPTY_ENV, ItemsEnv(items=[1, 2]))
 
     def test_zero_count(self):
         p = EnvListCount(field="items", count=0)
-        assert evaluate_predicate(p, "", {}, {"items": []})
+        assert evaluate_predicate(p, "", EMPTY_ENV, ItemsEnv(items=[]))
 
 
 class TestEnvFieldUnchanged:
     def test_unchanged(self):
         p = EnvFieldUnchanged(field="balance")
-        assert evaluate_predicate(p, "", {"balance": 100}, {"balance": 100})
+        assert evaluate_predicate(p, "", BalanceEnv(balance=100), BalanceEnv(balance=100))
 
     def test_changed(self):
         p = EnvFieldUnchanged(field="balance")
-        assert not evaluate_predicate(p, "", {"balance": 100}, {"balance": 50})
+        assert not evaluate_predicate(p, "", BalanceEnv(balance=100), BalanceEnv(balance=50))
 
 
 class TestAllOf:
@@ -179,7 +224,7 @@ class TestNestedCombinators:
                 EnvListCount(field="items", count=0),
             ]
         )
-        assert evaluate_predicate(p, "", {}, {"status": "inactive", "items": []})
+        assert evaluate_predicate(p, "", EMPTY_ENV, StatusItemsEnv(status="inactive", items=[]))
 
 
 class TestParsePredicate:

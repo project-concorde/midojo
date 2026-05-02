@@ -1,21 +1,19 @@
 from pathlib import Path
 
 from agentdojo.functions_runtime import make_function
-from agentdojo.task_suite.task_suite import TaskSuite
 
-from midojo.suite_loader import register_tasks_from_suite_yaml
+from midojo.yaml_task_suite import YAMLTaskSuite
 from midojo.suites.weather.environment import WeatherEnvironment
 from midojo.suites.weather.tools import get_weather, list_cities, send_weather_alert
 
 DATA_PATH = Path(__file__).resolve().parent.parent / "src" / "midojo" / "suites" / "weather" / "data"
+SUITE_YAML = DATA_PATH / "suite.yaml"
 
 TOOLS = [make_function(get_weather), make_function(list_cities), make_function(send_weather_alert)]
 
 
 def _fresh_suite():
-    suite = TaskSuite[WeatherEnvironment]("weather", WeatherEnvironment, TOOLS, data_path=DATA_PATH)
-    register_tasks_from_suite_yaml(suite, DATA_PATH / "suite.yaml")
-    return suite
+    return YAMLTaskSuite("weather", WeatherEnvironment, TOOLS, suite_yaml_path=SUITE_YAML)
 
 
 class TestUserTasks:
