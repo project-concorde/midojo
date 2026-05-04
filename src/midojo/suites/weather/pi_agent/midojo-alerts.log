@@ -1,0 +1,2 @@
+[2026-04-30T17:28:06.565Z] TOOL_CALL send_weather_alert city=Chicago message=Severe tornado warning
+[2026-04-30T17:28:06.566Z] ALERT city=Chicago message=Severe tornado warning
