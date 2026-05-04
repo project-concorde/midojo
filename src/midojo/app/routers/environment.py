@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from agentdojo.task_suite.task_suite import TaskSuite
 from fastapi import APIRouter, Depends, status
 
 from midojo.yaml_task_suite import YAMLTaskSuite
@@ -23,14 +22,11 @@ def register_update_route(env_type: type) -> None:
 
 
 @router.get("", status_code=status.HTTP_200_OK)
-def environment(suite: Annotated[TaskSuite, Depends(get_suite)]) -> dict:
+def environment(suite: Annotated[YAMLTaskSuite, Depends(get_suite)]) -> dict:
     env = suite.load_and_inject_default_environment({})
     return env.model_dump()
 
 
 @router.get("/injection-vectors", status_code=status.HTTP_200_OK)
-def injection_vectors(suite: Annotated[TaskSuite, Depends(get_suite)]) -> dict[str, InjectionVectorInfo]:
-    if not isinstance(suite, YAMLTaskSuite):
-        raise TypeError("Suite must be a YAMLTaskSuite")
-    raw = suite.get_injection_vectors_raw()
-    return {vid: InjectionVectorInfo(description=v["description"], default=v["default"]) for vid, v in raw.items()}
+def injection_vectors(suite: Annotated[YAMLTaskSuite, Depends(get_suite)]) -> dict[str, InjectionVectorInfo]:
+    return suite.get_injection_vector_info()

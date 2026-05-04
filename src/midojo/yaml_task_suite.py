@@ -8,6 +8,7 @@ from agentdojo.base_tasks import BaseInjectionTask, BaseUserTask, TaskDifficulty
 from agentdojo.functions_runtime import Function, FunctionCall, TaskEnvironment
 from agentdojo.task_suite.task_suite import TaskSuite, validate_injections
 
+from midojo.app.models import InjectionVectorInfo
 from midojo.predicates import Predicate, evaluate_predicate, parse_predicate
 
 _DIFFICULTY_MAP = {
@@ -47,6 +48,10 @@ class YAMLTaskSuite(TaskSuite):
 
     def get_injection_vectors_raw(self) -> dict[str, dict[str, str]]:
         return self._suite_raw.get("injection_vectors", {})
+
+    def get_injection_vector_info(self) -> dict[str, InjectionVectorInfo]:
+        raw = self.get_injection_vectors_raw()
+        return {vid: InjectionVectorInfo(description=v["description"], default=v["default"]) for vid, v in raw.items()}
 
     def _register_tasks(self) -> None:
         for task_raw in self._suite_raw.get("user_tasks", []):
