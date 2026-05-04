@@ -1,13 +1,14 @@
 from __future__ import annotations
 
-from agentdojo.task_suite.task_suite import TaskSuite
 from fastapi import HTTPException, status
+
+from midojo.yaml_task_suite import YAMLTaskSuite
 
 from . import state
 from .models import Evaluation, Run
 
 
-def get_suite() -> TaskSuite:
+def get_suite() -> YAMLTaskSuite:
     return state.suite
 
 
