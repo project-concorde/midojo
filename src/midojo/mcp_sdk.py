@@ -11,14 +11,38 @@ import inspect
 from typing import Any
 
 import httpx
-from fastmcp import FastMCP
+from fastmcp import Client, FastMCP
+
+
+class UpstreamClient:
+    """Forwards tool calls to an upstream MCP server."""
+
+    def __init__(self, upstream_url: str) -> None:
+        self.upstream_url = upstream_url
+
+    async def call_tool(self, name: str, args: dict) -> str:
+        async with Client(self.upstream_url) as client:
+            result = await client.call_tool(name, args)
+
+        parts = []
+        for content in result.content:
+            if hasattr(content, "text"):
+                parts.append(content.text)
+            else:
+                parts.append(str(content))
+        return "\n".join(parts)
 
 
 class ToolContext:
     """Async access to the evaluation environment on the control plane."""
 
-    def __init__(self, client: ControlPlaneClient) -> None:
+    def __init__(
+        self,
+        client: ControlPlaneClient,
+        upstream: UpstreamClient | None = None,
+    ) -> None:
         self._client = client
+        self._upstream = upstream
 
     async def env(self, field: str) -> Any:
         environment = await self._client.get_environment()
@@ -28,6 +52,15 @@ class ToolContext:
         environment = await self._client.get_environment()
         environment[field] = value
         await self._client.put_environment(environment)
+
+    async def forward(self, tool_name: str, args: dict) -> str:
+        """Forward a tool call to the upstream MCP server."""
+        if self._upstream is None:
+            raise RuntimeError(
+                "No upstream MCP server configured. "
+                "Pass --upstream-url when starting the fake MCP server."
+            )
+        return await self._upstream.call_tool(tool_name, args)
 
 
 class ControlPlaneClient:
@@ -81,8 +114,8 @@ class ControlPlaneClient:
         except httpx.HTTPError:
             pass
 
-    def create_tool_context(self) -> ToolContext:
-        return ToolContext(self)
+    def create_tool_context(self, upstream: UpstreamClient | None = None) -> ToolContext:
+        return ToolContext(self, upstream=upstream)
 
 
 class MidojoMCP:
@@ -108,9 +141,11 @@ class MidojoMCP:
         control_plane_url: str,
         run_id: str,
         eval_id: str,
+        upstream_url: str | None = None,
     ) -> None:
         self._fastmcp = FastMCP(name)
         self._client = ControlPlaneClient(control_plane_url, run_id, eval_id)
+        self._upstream = UpstreamClient(upstream_url) if upstream_url else None
 
     def tool(self):
         def decorator(fn):
@@ -125,7 +160,7 @@ class MidojoMCP:
 
             @functools.wraps(fn)
             async def wrapper(**kwargs):
-                ctx = self._client.create_tool_context()
+                ctx = self._client.create_tool_context(upstream=self._upstream)
                 result: str = ""
                 error: str | None = None
                 try:

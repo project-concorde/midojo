@@ -1,18 +1,8 @@
-from pathlib import Path
-
-from agentdojo.functions_runtime import make_function
-
-from midojo.yaml_task_suite import YAMLTaskSuite
-from midojo.suites.weather.a2a_agent import WeatherEnvironment, get_weather, list_cities, send_weather_alert
-
-DATA_PATH = Path(__file__).resolve().parent.parent / "src" / "midojo" / "suites" / "weather" / "data"
-SUITE_YAML = DATA_PATH / "suite.yaml"
-
-TOOLS = [make_function(get_weather), make_function(list_cities), make_function(send_weather_alert)]
+from midojo.suites.weather.task_suite import task_suite as _base_suite
 
 
 def _fresh_suite():
-    return YAMLTaskSuite("weather", WeatherEnvironment, TOOLS, suite_yaml_path=SUITE_YAML)
+    return _base_suite
 
 
 class TestUserTasks:

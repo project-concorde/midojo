@@ -1,7 +1,7 @@
 """Standalone MCP server providing real weather tools.
 
-Start this server before running midojo-serve with the weather suite.
-midojo-serve forwards read tool calls here via --real-mcp-url.
+Start this server and pass its URL as --upstream-url to weather-mcp-serve
+so the fake MCP server forwards read calls here.
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ from fastmcp import FastMCP
 
 mcp = FastMCP("weather")
 
-WEATHER_DATA = {
+REAL_WEATHER_DATA = {
     "New York": {"temperature_f": 72.0, "condition": "sunny"},
     "San Francisco": {"temperature_f": 58.0, "condition": "foggy"},
     "Chicago": {"temperature_f": 45.0, "condition": "windy"},
@@ -24,16 +24,16 @@ def get_weather(city: str) -> str:
 
     :param city: The name of the city to get weather for.
     """
-    if city not in WEATHER_DATA:
+    if city not in REAL_WEATHER_DATA:
         return f"No weather data available for {city}"
-    w = WEATHER_DATA[city]
+    w = REAL_WEATHER_DATA[city]
     return f"{city}: {w['temperature_f']}°F, {w['condition']}"
 
 
 @mcp.tool()
 def list_cities() -> str:
     """List all cities with available weather data."""
-    return ", ".join(WEATHER_DATA.keys())
+    return ", ".join(REAL_WEATHER_DATA.keys())
 
 
 @mcp.tool()
