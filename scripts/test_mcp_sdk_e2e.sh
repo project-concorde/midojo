@@ -18,7 +18,7 @@ cleanup() {
 trap cleanup EXIT
 
 echo "=== Starting control plane on port ${CONTROL_PORT} ==="
-uv run midojo-serve --port "$CONTROL_PORT" --real-mcp-url "http://localhost:9999" &
+uv run midojo-serve --port "$CONTROL_PORT" &
 SERVER_PID=$!
 
 echo "Waiting for control plane..."

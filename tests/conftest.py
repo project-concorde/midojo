@@ -1,19 +1,6 @@
-from unittest.mock import MagicMock
-
 import pytest
 
-from midojo.forwarding import MCPForwardingClient
 from midojo.suites.weather import task_suite
-
-
-@pytest.fixture(autouse=True)
-def _mock_forwarding_client():
-    original = MCPForwardingClient._instance
-    mock = MagicMock(spec=MCPForwardingClient)
-    mock.call_tool.return_value = ""
-    MCPForwardingClient._instance = mock
-    yield
-    MCPForwardingClient._instance = original
 
 
 @pytest.fixture

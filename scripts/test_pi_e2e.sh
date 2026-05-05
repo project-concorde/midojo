@@ -37,7 +37,7 @@ cleanup() {
 trap cleanup EXIT
 
 echo "=== Starting midojo server on port ${PORT} ==="
-uv run midojo-serve --port "$PORT" --real-mcp-url "http://localhost:9999" &
+uv run midojo-serve --port "$PORT" &
 SERVER_PID=$!
 
 echo "Waiting for server..."

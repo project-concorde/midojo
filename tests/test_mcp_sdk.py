@@ -149,3 +149,39 @@ def test_midojo_mcp_tool_requires_ctx():
         async def bad_tool(name: str) -> str:
             """Missing ctx."""
             return name
+
+
+# --- Forwarding / UpstreamClient tests ---
+
+
+from midojo.mcp_sdk import UpstreamClient
+
+
+@pytest.mark.asyncio
+async def test_tool_context_forward_raises_without_upstream():
+    client = ControlPlaneClient("http://localhost:9999", "r1", "e1")
+    ctx = client.create_tool_context()
+    with pytest.raises(RuntimeError, match="No upstream MCP server configured"):
+        await ctx.forward("get_weather", {"city": "New York"})
+
+
+def test_midojo_mcp_with_upstream():
+    mcp = MidojoMCP(
+        "test",
+        control_plane_url="http://localhost:9999",
+        run_id="r1",
+        eval_id="e1",
+        upstream_url="http://localhost:9998/mcp",
+    )
+    assert mcp._upstream is not None
+    assert mcp._upstream.upstream_url == "http://localhost:9998/mcp"
+
+
+def test_midojo_mcp_without_upstream():
+    mcp = MidojoMCP(
+        "test",
+        control_plane_url="http://localhost:9999",
+        run_id="r1",
+        eval_id="e1",
+    )
+    assert mcp._upstream is None
