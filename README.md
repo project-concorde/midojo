@@ -202,7 +202,7 @@ Create a PI extension using `@midojo/pi-sdk`'s `createMidojoExtension()` and dro
 
 ## Future Work
 
-Areas to explore for deeper integration with the Red Hat AI safety and evaluation stack.
+Areas to explore for deeper integration with AI safety and evaluation stacks.
 
 ### Beyond MCP: environment-level injection testing
 
