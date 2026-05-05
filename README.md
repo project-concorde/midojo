@@ -149,27 +149,6 @@ For [PI](https://pi.dev) coding agents. The agent already has its tools register
   - **Hooks** (`hooks`) — intercepts the result of an existing tool after it executes and modifies it before the agent sees it. Used for read tools where you want real data + injection payload.
   - Tools with no override or hook run unmodified.
 
-## Control Plane API
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/suite` | GET | Suite metadata: task IDs, tools, injection vectors |
-| `/suite/check` | GET | Run ground-truth preflight checks |
-| `/tasks/user` | GET | List user task IDs |
-| `/tasks/user/{id}` | GET | User task detail (prompt, ground truth) |
-| `/tasks/injection` | GET | List injection task IDs |
-| `/tasks/injection/{id}` | GET | Injection task detail (goal, ground truth) |
-| `/tasks/injection-candidates` | GET | Which injection vectors reach each user task |
-| `/tools` | GET | List available tools with schemas |
-| `/environment` | GET | Current environment state |
-| `/environment` | PUT | Update environment |
-| `/environment/injection-vectors` | GET | Injection vector descriptions and defaults |
-| `/runs` | POST | Create a new run |
-| `/runs/{id}` | GET | Retrieve run with evaluation summaries |
-| `/runs/{id}/evaluations` | POST | Create an evaluation (user task + optional injection task) |
-| `/runs/{id}/evaluations/{id}` | GET | Retrieve evaluation details |
-| `/runs/{id}/evaluations/{id}/complete` | POST | Submit agent's final output |
-| `/runs/{id}/evaluations/{id}/grade` | POST | Grade utility and security |
 
 ## Adding a New Suite
 
