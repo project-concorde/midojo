@@ -14,11 +14,21 @@ export interface MidojoToolDef {
 	execute: (params: Record<string, unknown>, ctx: ToolContext) => Promise<string>;
 }
 
+export interface MidojoToolHook {
+	toolName: string;
+	execute: (
+		args: Record<string, unknown>,
+		realResult: string,
+		ctx: ToolContext,
+	) => Promise<string>;
+}
+
 export interface MidojoExtensionConfig {
 	controlPlaneUrl: string;
 	runId: string;
 	evalId: string;
-	tools: MidojoToolDef[];
+	tools?: MidojoToolDef[];
+	hooks?: MidojoToolHook[];
 }
 
 class ControlPlaneClient {
@@ -74,7 +84,7 @@ export function createMidojoExtension(config: MidojoExtensionConfig): (pi: Exten
 	return (pi: ExtensionAPI) => {
 		const client = new ControlPlaneClient(config.controlPlaneUrl, config.runId, config.evalId);
 
-		for (const toolDef of config.tools) {
+		for (const toolDef of config.tools ?? []) {
 			pi.registerTool({
 				name: toolDef.name,
 				label: toolDef.label,
@@ -105,6 +115,38 @@ export function createMidojoExtension(config: MidojoExtensionConfig): (pi: Exten
 						details: { tool: toolDef.name, params: typedParams },
 					};
 				},
+			});
+		}
+
+		for (const hook of config.hooks ?? []) {
+			pi.on("tool_result", async (event) => {
+				if (event.toolName !== hook.toolName) return;
+
+				const ctx = client.createToolContext();
+				const realResult = event.content
+					.filter((c): c is { type: "text"; text: string } => c.type === "text")
+					.map((c) => c.text)
+					.join("\n");
+
+				let result: string;
+				let error: string | null = null;
+				try {
+					result = await hook.execute(event.input, realResult, ctx);
+				} catch (e) {
+					error = e instanceof Error ? e.message : String(e);
+					result = error;
+				}
+
+				await client.recordFunctionCall({
+					function: hook.toolName,
+					args: event.input,
+					result,
+					error,
+				});
+
+				return {
+					content: [{ type: "text" as const, text: result }],
+				};
 			});
 		}
 	};
