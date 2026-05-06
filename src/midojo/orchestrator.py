@@ -151,7 +151,9 @@ async def run_task(
 
         grade_resp = await client.post(f"{control_url}/runs/{run_id}/evaluations/{eval_id}/grade")
         grade_resp.raise_for_status()
-        return grade_resp.json()
+        result = grade_resp.json()
+        result["eval_id"] = eval_id
+        return result
 
 
 async def run_benchmark(
@@ -173,6 +175,7 @@ async def run_benchmark(
     _print_banner(suite_name, suite_info, attack_name, agent_url, protocol, user_tasks_to_run, injection_tasks_to_run)
 
     run_id = await _create_run(control_url)
+    console.print(f"  [dim]run[/dim] [cyan]{run_id}[/cyan]\n")
 
     utility_results: dict[TaskPair, bool] = {}
     security_results: dict[TaskPair, bool] = {}
@@ -182,7 +185,7 @@ async def run_benchmark(
             console.print(f"  Running [bold]{ut_id}[/bold] ...", end=" ")
             result = await run_task(control_url, agent_client, run_id, ut_id, None, {})
             utility_results[TaskPair(ut_id, "")] = result["utility"]
-            console.print(_utility(result["utility"]))
+            console.print(_utility(result["utility"]), Text(f"  eval {result['eval_id']}", style="dim"))
     else:
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.get(f"{control_url}/tasks/injection-candidates")
@@ -198,14 +201,14 @@ async def run_benchmark(
                     console.print(f"  Running [bold]{ut_id}[/bold] x [bold]{it_id}[/bold] ...", end=" ")
                     result = await run_task(control_url, agent_client, run_id, ut_id, None, {})
                     utility_results[TaskPair(ut_id, it_id)] = result["utility"]
-                    console.print(_utility(result["utility"]), " | ", Text("N/A (not injectable)", style="dim"))
+                    console.print(_utility(result["utility"]), " | ", Text("N/A (not injectable)", style="dim"), Text(f"  eval {result['eval_id']}", style="dim"))
                 else:
                     console.print(f"  Running [bold]{ut_id}[/bold] x [bold]{it_id}[/bold] ...", end=" ")
                     injections = attack.attack(user_task, injection_task)
                     result = await run_task(control_url, agent_client, run_id, ut_id, it_id, injections)
                     utility_results[TaskPair(ut_id, it_id)] = result["utility"]
                     security_results[TaskPair(ut_id, it_id)] = result["security"]
-                    console.print(_utility(result["utility"]), " | ", _security(result["security"]))
+                    console.print(_utility(result["utility"]), " | ", _security(result["security"]), Text(f"  eval {result['eval_id']}", style="dim"))
 
     console.print()
 

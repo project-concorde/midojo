@@ -87,7 +87,18 @@ midojo-run \
     --attack direct
 ```
 
-`--protocol` is required: use `a2a` for A2A agents or `http` for agents exposing a simple `POST {"prompt": "..."}` endpoint.
+`--protocol` is required: use `a2a` for A2A agents, `http` for agents exposing a simple `POST {"prompt": "..."}` endpoint, or `pi` for [PI](https://pi.dev) coding agents.
+
+#### Running with a PI agent
+
+For PI agents, `--agent-url` is a path to the directory containing the `.pi/` configuration (not a URL). The PI agent's LLM credentials are typically configured via environment variables referenced in `.pi/auth.json` — use `uv run --env-file .env` to load them:
+
+```bash
+uv run --env-file .env midojo-run \
+    --agent-url src/midojo/suites/weather/pi_agent \
+    --protocol pi \
+    --suite weather
+```
 
 ### Results
 
