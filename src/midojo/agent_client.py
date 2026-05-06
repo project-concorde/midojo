@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import abc
+import asyncio
+import os
 import uuid
 
 import httpx
@@ -8,7 +10,7 @@ import httpx
 
 class AgentClient(abc.ABC):
     @abc.abstractmethod
-    async def send_task(self, prompt: str) -> str:
+    async def send_task(self, prompt: str, *, run_id: str = "", eval_id: str = "") -> str:
         """Send a task prompt to the agent and return its final text output."""
         ...
 
@@ -24,7 +26,7 @@ class SimpleHTTPAgentClient(AgentClient):
         self.agent_url = agent_url
         self.timeout = timeout
 
-    async def send_task(self, prompt: str) -> str:
+    async def send_task(self, prompt: str, *, run_id: str = "", eval_id: str = "") -> str:
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             resp = await client.post(self.agent_url, json={"prompt": prompt})
             resp.raise_for_status()
@@ -46,7 +48,7 @@ class A2AAgentClient(AgentClient):
         self.agent_url = agent_url
         self.timeout = timeout
 
-    async def send_task(self, prompt: str) -> str:
+    async def send_task(self, prompt: str, *, run_id: str = "", eval_id: str = "") -> str:
         from a2a.client import create_client
         from a2a.types import Message, Part, Role, SendMessageRequest
 
@@ -80,3 +82,54 @@ class A2AAgentClient(AgentClient):
             return result_text
         finally:
             await client.close()
+
+
+class PIAgentClient(AgentClient):
+    """Launches a PI coding agent as a subprocess for each task.
+
+    The ``agent_dir`` should point to a directory containing a ``.pi/``
+    configuration folder with extensions that use ``@midojo/pi-sdk``.
+    """
+
+    def __init__(
+        self,
+        agent_dir: str,
+        control_url: str,
+        *,
+        timeout: float = 120.0,
+    ) -> None:
+        self.agent_dir = agent_dir
+        self.control_url = control_url
+        self.timeout = timeout
+
+    async def send_task(self, prompt: str, *, run_id: str = "", eval_id: str = "") -> str:
+        env = {
+            **os.environ,
+            "MIDOJO_URL": self.control_url,
+            "MIDOJO_RUN_ID": run_id,
+            "MIDOJO_EVAL_ID": eval_id,
+        }
+
+        proc = await asyncio.create_subprocess_exec(
+            "pi", "-p", "--no-session", prompt,
+            cwd=self.agent_dir,
+            env=env,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+
+        try:
+            stdout, stderr = await asyncio.wait_for(
+                proc.communicate(), timeout=self.timeout
+            )
+        except asyncio.TimeoutError:
+            proc.kill()
+            await proc.wait()
+            raise TimeoutError(f"PI agent timed out after {self.timeout}s")
+
+        if proc.returncode != 0:
+            raise RuntimeError(
+                f"PI agent exited with code {proc.returncode}: {stderr.decode()}"
+            )
+
+        return stdout.decode().strip()

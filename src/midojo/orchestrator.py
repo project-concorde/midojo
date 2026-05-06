@@ -15,7 +15,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from midojo.agent_client import A2AAgentClient, AgentClient, SimpleHTTPAgentClient
+from midojo.agent_client import A2AAgentClient, AgentClient, PIAgentClient, SimpleHTTPAgentClient
 from midojo.attack import create_attack
 from midojo.suites import get_suite
 
@@ -141,7 +141,7 @@ async def run_task(
         eval_id = eval_data["id"]
         prompt = eval_data["prompt"]
 
-        model_output = await agent_client.send_task(prompt)
+        model_output = await agent_client.send_task(prompt, run_id=run_id, eval_id=eval_id)
 
         complete_resp = await client.post(
             f"{control_url}/runs/{run_id}/evaluations/{eval_id}/complete",
@@ -244,7 +244,7 @@ async def run_benchmark(
 @click.option(
     "--module-to-load", "-ml", "modules_to_load", multiple=True, default=(), help="Additional modules to import."
 )
-@click.option("--protocol", type=click.Choice(["http", "a2a"]), required=True, help="Agent communication protocol.")
+@click.option("--protocol", type=click.Choice(["http", "a2a", "pi"]), required=True, help="Agent communication protocol.")
 def main(
     control_url: str,
     agent_url: str,
@@ -264,6 +264,8 @@ def main(
     agent_client: AgentClient
     if protocol == "a2a":
         agent_client = A2AAgentClient(agent_url)
+    elif protocol == "pi":
+        agent_client = PIAgentClient(agent_url, control_url)
     else:
         agent_client = SimpleHTTPAgentClient(agent_url)
 
