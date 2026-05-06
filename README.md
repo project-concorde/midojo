@@ -9,7 +9,7 @@ MiDojo lets you red-team your agent in its real environment. Author compromised 
 - **speaks [MCP](https://modelcontextprotocol.io)** — author a fake MCP server with `MidojoMCP` (Python SDK). It replaces the agent's real server, forwarding calls upstream and splicing in injection payloads.
 - **is built with [PI](https://pi.dev)** — author a fake extension with `@midojo/pi-sdk` (TypeScript SDK). It hooks into PI's extension system to intercept and modify tool results.
 
-For each tool, decide: **read tools** forward to the real upstream server and append injection data; **write tools** run against a local simulated environment so mutations are captured for grading.
+For each tool, you can forward the call to the real tool, splice in injection data from the suite environment, and/or update the local environment so mutations are captured for grading — in any combination.
 
 The project also includes:
 
