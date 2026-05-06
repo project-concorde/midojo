@@ -98,7 +98,7 @@ class PIAgentClient(AgentClient):
         *,
         timeout: float = 120.0,
     ) -> None:
-        self.agent_dir = agent_dir
+        self.agent_dir = os.path.abspath(agent_dir)
         self.control_url = control_url
         self.timeout = timeout
 
