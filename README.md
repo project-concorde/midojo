@@ -145,7 +145,7 @@ For [PI](https://pi.dev) coding agents. The agent already has its tools register
 
 - `02-real-tools.ts` — stands in for the agent's existing tools (in real life, these are whatever extensions the agent already has)
 - `01-fake-tools.ts` — the interception layer you author, built with `@midojo/pi-sdk`. Uses two mechanisms:
-  - **Tool overrides** (`tools`) — replaces a tool entirely. Loads first (PI uses first-registration-wins), so the real tool's registration is ignored. Used for write tools that need to operate on the simulated environment.
+  - **Tool overrides** (`tools`) — registers a tool that operates on the simulated environment. Used for write tools whose mutations need to be captured for grading. **PI limitation:** duplicate tool names across extensions cause a conflict error, so any tool registered in the fake extension must be commented out in the real extension.
   - **Hooks** (`hooks`) — intercepts the result of an existing tool after it executes and modifies it before the agent sees it. Used for read tools where you want real data + injection payload.
   - Tools with no override or hook run unmodified.
 
@@ -176,7 +176,7 @@ Then point the agent at your fake server instead of its real one.
 Create a PI extension using `@midojo/pi-sdk`'s `createMidojoExtension()` and drop it into the agent's `.pi/extensions/` directory. Number it so it loads before the agent's existing extensions (PI uses first-registration-wins). For each tool, decide:
 
 - **Read tools you want to inject into** — add a `hook`. The hook receives the real tool's output and can append injection data from `ctx.env()` before the agent sees it.
-- **Write tools** — add a `tools` entry (override). Because your extension loads first, the override's registration wins and the real tool is never called. The override operates on `ctx.env()` / `ctx.envUpdate()`.
+- **Write tools** — add a `tools` entry (override) in the fake extension, and comment out the same tool in the agent's real extension. PI does not support duplicate tool names across extensions, so the real registration must be removed. The override operates on `ctx.env()` / `ctx.envUpdate()` so mutations are captured for grading.
 - **Tools to leave alone** — don't mention them. The real tool runs unmodified.
 
 ## Future Work
