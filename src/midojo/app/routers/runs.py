@@ -3,7 +3,6 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Annotated
 
-from agentdojo.functions_runtime import FunctionsRuntime
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from midojo.yaml_task_suite import YAMLTaskSuite
@@ -27,6 +26,17 @@ from ..models import (
 from ..state import Evaluation, Run, _new_id
 
 router = APIRouter(prefix="/runs")
+
+
+@router.get("/current-eval", status_code=status.HTTP_200_OK)
+def get_current_eval():
+    if state.current_eval is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No active evaluation")
+    run_id = next(
+        (rid for rid, run in state.runs.items() if state.current_eval.id in run.evaluations),
+        None,
+    )
+    return {"run_id": run_id, "eval_id": state.current_eval.id}
 
 
 @router.post("", response_model=CreateRunResponse, status_code=status.HTTP_201_CREATED)
@@ -70,7 +80,6 @@ def create_evaluation(
 
     environment = suite.load_and_inject_default_environment(req.injections)
     pre_environment = environment.model_copy(deep=True)
-    runtime = FunctionsRuntime(suite.tools)
 
     evaluation = Evaluation(
         id=_new_id(),
@@ -78,7 +87,6 @@ def create_evaluation(
         injection_task_id=req.injection_task_id,
         pre_environment=pre_environment,
         environment=environment,
-        runtime=runtime,
         active_injections=req.injections,
     )
     run.evaluations[evaluation.id] = evaluation
