@@ -8,6 +8,10 @@ build/
 # Virtual environments
 .venv/
 
+# Node
+node_modules/
+package-lock.json
+
 # Environment / secrets
 .env
 **/.pi/models.json
