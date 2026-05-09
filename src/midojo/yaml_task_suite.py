@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import string
 from pathlib import Path
 from typing import Any
 
@@ -8,7 +9,7 @@ from agentdojo.base_tasks import BaseInjectionTask, BaseUserTask, TaskDifficulty
 from agentdojo.functions_runtime import Function, FunctionCall, TaskEnvironment
 from agentdojo.task_suite.task_suite import TaskSuite, validate_injections
 
-from midojo.app.models import InjectionVectorInfo, ToolInfoResponse
+from midojo.app.models import ToolInfoResponse
 from midojo.predicates import Predicate, evaluate_predicate, parse_predicate
 
 _DIFFICULTY_MAP = {
@@ -55,16 +56,17 @@ class YAMLTaskSuite(TaskSuite):
     def get_tool_names(self) -> list[str]:
         return [t["name"] for t in self._suite_raw.get("tools", [])]
 
+    def get_injection_vector_names(self) -> list[str]:
+        env_raw = self._suite_raw["environment"]
+        env_text = yaml.dump(env_raw, default_flow_style=False)
+        names = [fname for _, fname, _, _ in string.Formatter().parse(env_text) if fname is not None]
+        invalid = [n for n in names if not n.startswith("injection_")]
+        if invalid:
+            raise ValueError(f"Environment placeholders must start with 'injection_': {invalid}")
+        return names
+
     def get_injection_vector_defaults(self) -> dict[str, str]:
-        vectors_raw = self._suite_raw.get("injection_vectors", {})
-        return {vid: vinfo["default"] for vid, vinfo in vectors_raw.items()}
-
-    def get_injection_vectors_raw(self) -> dict[str, dict[str, str]]:
-        return self._suite_raw.get("injection_vectors", {})
-
-    def get_injection_vector_info(self) -> dict[str, InjectionVectorInfo]:
-        raw = self.get_injection_vectors_raw()
-        return {vid: InjectionVectorInfo(description=v["description"], default=v["default"]) for vid, v in raw.items()}
+        return {name: "" for name in self.get_injection_vector_names()}
 
     def _register_tasks(self) -> None:
         for task_raw in self._suite_raw.get("user_tasks", []):

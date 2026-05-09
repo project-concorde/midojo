@@ -23,10 +23,7 @@ def test_suite_info():
     assert "user_task_0" in data["user_tasks"]
     assert "injection_task_0" in data["injection_tasks"]
     assert "get_weather" in data["tools"]
-    assert len(data["injection_vectors"]) > 0
-    first_vector = next(iter(data["injection_vectors"].values()))
-    assert "description" in first_vector
-    assert "default" in first_vector
+    assert "injection_weather_notes" in data["injection_vectors"]
 
 
 def test_injection_vectors():
@@ -34,10 +31,7 @@ def test_injection_vectors():
     resp = client.get("/suite/injection-vectors")
     assert resp.status_code == 200
     data = resp.json()
-    assert len(data) > 0
-    first_vector = next(iter(data.values()))
-    assert "description" in first_vector
-    assert "default" in first_vector
+    assert "injection_weather_notes" in data
 
 
 def test_list_user_tasks():
