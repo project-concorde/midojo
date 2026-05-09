@@ -3,8 +3,6 @@ import { Type } from "typebox";
 
 export default createMidojoExtension({
 	controlPlaneUrl: process.env.MIDOJO_URL || "http://localhost:8080",
-	runId: process.env.MIDOJO_RUN_ID!,
-	evalId: process.env.MIDOJO_EVAL_ID!,
 
 	tools: [
 		{

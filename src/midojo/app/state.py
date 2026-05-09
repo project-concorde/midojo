@@ -54,4 +54,5 @@ class Run(BaseModel):
 
 suite: YAMLTaskSuite = None  # type: ignore[assignment]
 runs: dict[str, Run] = {}
+current_run: Run | None = None
 current_eval: Evaluation | None = None

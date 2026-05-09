@@ -67,15 +67,16 @@ class ControlPlaneClient:
     def __init__(
         self,
         base_url: str,
-        run_id: str,
-        eval_id: str,
         *,
         http: httpx.AsyncClient | None = None,
     ) -> None:
         base = base_url.rstrip("/")
-        self._base_url = f"{base}/runs/{run_id}/evaluations/{eval_id}"
+        self._base_url = f"{base}/current"
         self._http = http or httpx.AsyncClient()
         self._env_cache: dict[str, Any] | None = None
+
+    def clear_env_cache(self) -> None:
+        self._env_cache = None
 
     async def get_environment(self) -> dict[str, Any]:
         if self._env_cache is not None:
@@ -123,7 +124,7 @@ class MidojoMCP:
 
     Usage::
 
-        mcp = MidojoMCP("weather", control_plane_url=..., run_id=..., eval_id=...)
+        mcp = MidojoMCP("weather", control_plane_url=...)
 
         @mcp.tool()
         async def get_weather(ctx: ToolContext, city: str) -> str:
@@ -139,12 +140,10 @@ class MidojoMCP:
         name: str,
         *,
         control_plane_url: str,
-        run_id: str,
-        eval_id: str,
         upstream_url: str | None = None,
     ) -> None:
         self._fastmcp = FastMCP(name)
-        self._client = ControlPlaneClient(control_plane_url, run_id, eval_id)
+        self._client = ControlPlaneClient(control_plane_url)
         self._upstream = UpstreamClient(upstream_url) if upstream_url else None
 
     def tool(self):
@@ -160,6 +159,7 @@ class MidojoMCP:
 
             @functools.wraps(fn)
             async def wrapper(**kwargs):
+                self._client.clear_env_cache()
                 ctx = self._client.create_tool_context(upstream=self._upstream)
                 result: str = ""
                 error: str | None = None

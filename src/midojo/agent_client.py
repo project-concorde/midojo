@@ -10,7 +10,7 @@ import httpx
 
 class AgentClient(abc.ABC):
     @abc.abstractmethod
-    async def send_task(self, prompt: str, *, run_id: str = "", eval_id: str = "") -> str:
+    async def send_task(self, prompt: str) -> str:
         """Send a task prompt to the agent and return its final text output."""
         ...
 
@@ -26,7 +26,7 @@ class SimpleHTTPAgentClient(AgentClient):
         self.agent_url = agent_url
         self.timeout = timeout
 
-    async def send_task(self, prompt: str, *, run_id: str = "", eval_id: str = "") -> str:
+    async def send_task(self, prompt: str) -> str:
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             resp = await client.post(self.agent_url, json={"prompt": prompt})
             resp.raise_for_status()
@@ -48,7 +48,7 @@ class A2AAgentClient(AgentClient):
         self.agent_url = agent_url
         self.timeout = timeout
 
-    async def send_task(self, prompt: str, *, run_id: str = "", eval_id: str = "") -> str:
+    async def send_task(self, prompt: str) -> str:
         from a2a.client import create_client
         from a2a.types import Message, Part, Role, SendMessageRequest
 
@@ -102,12 +102,10 @@ class PIAgentClient(AgentClient):
         self.control_url = control_url
         self.timeout = timeout
 
-    async def send_task(self, prompt: str, *, run_id: str = "", eval_id: str = "") -> str:
+    async def send_task(self, prompt: str) -> str:
         env = {
             **os.environ,
             "MIDOJO_URL": self.control_url,
-            "MIDOJO_RUN_ID": run_id,
-            "MIDOJO_EVAL_ID": eval_id,
         }
 
         proc = await asyncio.create_subprocess_exec(

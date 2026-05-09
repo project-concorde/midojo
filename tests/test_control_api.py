@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 
 from midojo.app import state
 from midojo.app.models import FunctionCallRecord
-from midojo.app.routers import runs
+from midojo.app.routers import current, runs
 from suites.weather import task_suite
 
 
@@ -12,10 +12,13 @@ from suites.weather import task_suite
 def client() -> TestClient:
     state.suite = task_suite
     state.runs = {}
+    state.current_run = None
     state.current_eval = None
     app = FastAPI()
     runs.register_environment_update_route(task_suite.environment_type)
     app.include_router(runs.router)
+    current.register_environment_update_route(task_suite.environment_type)
+    app.include_router(current.router)
     return TestClient(app)
 
 
@@ -252,3 +255,81 @@ def test_record_function_call_pre_env_chain(client):
     record2 = resp2.json()
     assert record2["pre_environment"] == record1["post_environment"]
     assert record2["post_environment"]["weather_alerts"] == [{"city": "New York", "message": "Storm warning"}]
+
+
+# --- /current/* endpoints ---
+
+
+def test_current_environment_400_before_eval(client):
+    resp = client.get("/current/environment")
+    assert resp.status_code == 400
+
+
+def test_current_environment_resolves_active_eval(client):
+    run_id = _create_run(client)
+    eval_data = _create_evaluation(client, run_id)
+    eval_id = eval_data["id"]
+
+    resp = client.get("/current/environment")
+    assert resp.status_code == 200
+    assert resp.json() == client.get(f"/runs/{run_id}/evaluations/{eval_id}/environment").json()
+
+
+def test_current_environment_put(client):
+    run_id = _create_run(client)
+    eval_data = _create_evaluation(client, run_id)
+    eval_id = eval_data["id"]
+
+    env = client.get("/current/environment").json()
+    env["weather_alerts"] = [{"city": "Boston", "message": "blizzard"}]
+    resp = client.put("/current/environment", json=env)
+    assert resp.status_code == 200
+
+    fresh = client.get(f"/runs/{run_id}/evaluations/{eval_id}/environment").json()
+    assert fresh["weather_alerts"] == [{"city": "Boston", "message": "blizzard"}]
+
+
+def test_current_function_calls_post_and_list(client):
+    run_id = _create_run(client)
+    eval_data = _create_evaluation(client, run_id)
+    eval_id = eval_data["id"]
+
+    resp = client.post(
+        "/current/function-calls",
+        json={"function": "get_weather", "args": {"city": "New York"}, "result": "72°F"},
+    )
+    assert resp.status_code == 201
+
+    listed = client.get("/current/function-calls").json()
+    assert len(listed) == 1
+    assert listed[0]["function"] == "get_weather"
+
+    # Same record should be visible via the nested URL.
+    nested = client.get(f"/runs/{run_id}/evaluations/{eval_id}/function-calls").json()
+    assert len(nested) == 1
+
+
+def test_current_follows_eval_switch(client):
+    """Creating a new eval should make /current resolve to it, not the previous one."""
+    run_id = _create_run(client)
+    eval1 = _create_evaluation(client, run_id)["id"]
+
+    client.post(
+        "/current/function-calls",
+        json={"function": "get_weather", "args": {"city": "NYC"}, "result": "first eval"},
+    )
+
+    eval2 = _create_evaluation(client, run_id)["id"]
+    assert eval2 != eval1
+
+    client.post(
+        "/current/function-calls",
+        json={"function": "get_weather", "args": {"city": "NYC"}, "result": "second eval"},
+    )
+
+    eval1_calls = client.get(f"/runs/{run_id}/evaluations/{eval1}/function-calls").json()
+    eval2_calls = client.get(f"/runs/{run_id}/evaluations/{eval2}/function-calls").json()
+    assert len(eval1_calls) == 1
+    assert eval1_calls[0]["result"] == "first eval"
+    assert len(eval2_calls) == 1
+    assert eval2_calls[0]["result"] == "second eval"

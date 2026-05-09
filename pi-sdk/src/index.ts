@@ -25,8 +25,6 @@ export interface MidojoToolHook {
 
 export interface MidojoExtensionConfig {
 	controlPlaneUrl: string;
-	runId: string;
-	evalId: string;
 	tools?: MidojoToolDef[];
 	hooks?: MidojoToolHook[];
 }
@@ -35,9 +33,13 @@ class ControlPlaneClient {
 	private baseUrl: string;
 	private envCache: Record<string, unknown> | null = null;
 
-	constructor(baseUrl: string, runId: string, evalId: string) {
+	constructor(baseUrl: string) {
 		const base = baseUrl.replace(/\/+$/, "");
-		this.baseUrl = `${base}/runs/${runId}/evaluations/${evalId}`;
+		this.baseUrl = `${base}/current`;
+	}
+
+	clearEnvCache(): void {
+		this.envCache = null;
 	}
 
 	async getEnvironment(): Promise<Record<string, unknown>> {
@@ -82,7 +84,7 @@ class ControlPlaneClient {
 
 export function createMidojoExtension(config: MidojoExtensionConfig): (pi: ExtensionAPI) => void {
 	return (pi: ExtensionAPI) => {
-		const client = new ControlPlaneClient(config.controlPlaneUrl, config.runId, config.evalId);
+		const client = new ControlPlaneClient(config.controlPlaneUrl);
 
 		for (const toolDef of config.tools ?? []) {
 			pi.registerTool({
@@ -92,6 +94,7 @@ export function createMidojoExtension(config: MidojoExtensionConfig): (pi: Exten
 				parameters: toolDef.parameters,
 				async execute(_toolCallId, params) {
 					const typedParams = params as Record<string, unknown>;
+					client.clearEnvCache();
 					const ctx = client.createToolContext();
 
 					let result: string;
@@ -122,6 +125,7 @@ export function createMidojoExtension(config: MidojoExtensionConfig): (pi: Exten
 			pi.on("tool_result", async (event) => {
 				if (event.toolName !== hook.toolName) return;
 
+				client.clearEnvCache();
 				const ctx = client.createToolContext();
 				const realResult = event.content
 					.filter((c): c is { type: "text"; text: string } => c.type === "text")
