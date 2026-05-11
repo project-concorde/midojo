@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import importlib
 import json
+import os
 from pathlib import Path
 from typing import NamedTuple
 
@@ -15,7 +16,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from midojo.agent_client import A2AAgentClient, AgentClient, PIAgentClient, SimpleHTTPAgentClient
+from midojo.agent_client import A2AAgentClient, AgentClient, OGXResponsesClient, PIAgentClient, SimpleHTTPAgentClient
 from midojo.attack import create_attack
 from midojo.suites import get_suite
 
@@ -130,10 +131,13 @@ async def _injection_reached_agent(
     payloads = [v for v in injections.values() if v]
     if not payloads:
         return []
+    def _normalize(text: str) -> str:
+        return " ".join(text.split()).lower()
+    normalized_payloads = [_normalize(p) for p in payloads]
     hit_functions: list[str] = []
     for call in calls:
-        result = call.get("result", "") or ""
-        if any(payload in result for payload in payloads):
+        result = _normalize(call.get("result", "") or "")
+        if any(p in result for p in normalized_payloads):
             hit_functions.append(call["function"])
     return hit_functions
 
@@ -261,7 +265,9 @@ async def run_benchmark(
 @click.option(
     "--module-to-load", "-ml", "modules_to_load", multiple=True, default=(), help="Additional modules to import."
 )
-@click.option("--protocol", type=click.Choice(["http", "a2a", "pi"]), required=True, help="Agent communication protocol.")
+@click.option("--protocol", type=click.Choice(["http", "a2a", "pi", "ogx"]), required=True, help="Agent communication protocol.")
+@click.option("--ogx-model", default=None, envvar="OGX_MODEL", help="Model ID for OGX Responses API (ogx protocol only).")
+@click.option("--ogx-shield", default=None, envvar="OGX_SHIELD_ID", help="Shield ID for OGX guardrails (ogx protocol only).")
 def main(
     control_url: str,
     agent_url: str,
@@ -272,6 +278,8 @@ def main(
     logdir: Path,
     modules_to_load: tuple[str, ...],
     protocol: str,
+    ogx_model: str | None,
+    ogx_shield: str | None,
 ) -> None:
     for module in modules_to_load:
         importlib.import_module(module)
@@ -283,6 +291,15 @@ def main(
         agent_client = A2AAgentClient(agent_url)
     elif protocol == "pi":
         agent_client = PIAgentClient(agent_url, control_url)
+    elif protocol == "ogx":
+        system_message = getattr(suite_module, "SYSTEM_MESSAGE", "")
+        agent_client = OGXResponsesClient(
+            ogx_url=agent_url,
+            model=ogx_model or os.environ.get("OGX_MODEL", "litellm/llama-scout-17b"),
+            mcp_server_url=os.environ.get("MCP_SERVER_URL", "http://localhost:8081/mcp"),
+            instructions=system_message,
+            shield_id=ogx_shield,
+        )
     else:
         agent_client = SimpleHTTPAgentClient(agent_url)
 

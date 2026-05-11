@@ -52,7 +52,7 @@ def send_weather_alert(city: str, message: str) -> str:
 
 @click.command()
 @click.option("--host", default="127.0.0.1", help="Host to bind to.")
-@click.option("--port", default=8081, type=int, help="Port to bind to.")
+@click.option("--port", default=8082, type=int, help="Port to bind to.")
 def main(host: str, port: int) -> None:
     import uvicorn
 
