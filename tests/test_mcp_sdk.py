@@ -7,30 +7,12 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from midojo.app import state
-from midojo.app.routers import runs
 from midojo.mcp_sdk import ControlPlaneClient, MidojoMCP, ToolContext
-from suites.weather import task_suite
-
-
-def _make_app() -> FastAPI:
-    state.suite = task_suite
-    state.runs = {}
-    state.current_eval = None
-    app = FastAPI()
-    runs.register_environment_update_route(task_suite.environment_type)
-    app.include_router(runs.router)
-    return app
 
 
 @pytest.fixture()
-def app() -> FastAPI:
-    return _make_app()
-
-
-@pytest.fixture()
-def control_plane(app) -> TestClient:
-    return TestClient(app)
+def control_plane(client) -> TestClient:
+    return client
 
 
 @pytest.fixture()
@@ -43,18 +25,16 @@ def eval_context(control_plane: TestClient) -> tuple[TestClient, str, str]:
     return control_plane, run_id, eval_resp["id"]
 
 
-def _make_client(app: FastAPI, run_id: str, eval_id: str) -> ControlPlaneClient:
+def _make_client(app: FastAPI) -> ControlPlaneClient:
     transport = httpx.ASGITransport(app=app)
     http = httpx.AsyncClient(transport=transport, base_url="http://testserver")
-    return ControlPlaneClient(
-        "http://testserver", run_id, eval_id, http=http
-    )
+    return ControlPlaneClient("http://testserver", http=http)
 
 
 @pytest.mark.asyncio
 async def test_control_plane_client_get_environment(eval_context, app):
     cp, run_id, eval_id = eval_context
-    client = _make_client(app, run_id, eval_id)
+    client = _make_client(app)
 
     env = await client.get_environment()
     assert "cities" in env
@@ -64,7 +44,7 @@ async def test_control_plane_client_get_environment(eval_context, app):
 @pytest.mark.asyncio
 async def test_control_plane_client_put_environment(eval_context, app):
     cp, run_id, eval_id = eval_context
-    client = _make_client(app, run_id, eval_id)
+    client = _make_client(app)
 
     env = await client.get_environment()
     env["weather_alerts"] = [{"city": "NYC", "message": "test"}]
@@ -77,7 +57,7 @@ async def test_control_plane_client_put_environment(eval_context, app):
 @pytest.mark.asyncio
 async def test_control_plane_client_record_function_call(eval_context, app):
     cp, run_id, eval_id = eval_context
-    client = _make_client(app, run_id, eval_id)
+    client = _make_client(app)
 
     await client.record_function_call(
         function="get_weather",
@@ -93,7 +73,7 @@ async def test_control_plane_client_record_function_call(eval_context, app):
 @pytest.mark.asyncio
 async def test_tool_context_env(eval_context, app):
     _, run_id, eval_id = eval_context
-    client = _make_client(app, run_id, eval_id)
+    client = _make_client(app)
     ctx = client.create_tool_context()
 
     cities = await ctx.env("cities")
@@ -103,7 +83,7 @@ async def test_tool_context_env(eval_context, app):
 @pytest.mark.asyncio
 async def test_tool_context_env_update(eval_context, app):
     cp, run_id, eval_id = eval_context
-    client = _make_client(app, run_id, eval_id)
+    client = _make_client(app)
     ctx = client.create_tool_context()
 
     alerts = await ctx.env("weather_alerts")
@@ -115,12 +95,7 @@ async def test_tool_context_env_update(eval_context, app):
 
 
 def test_midojo_mcp_tool_registration():
-    mcp = MidojoMCP(
-        "test",
-        control_plane_url="http://localhost:9999",
-        run_id="r1",
-        eval_id="e1",
-    )
+    mcp = MidojoMCP("test", control_plane_url="http://localhost:9999")
 
     @mcp.tool()
     async def my_tool(ctx: ToolContext, name: str) -> str:
@@ -136,12 +111,7 @@ def test_midojo_mcp_tool_registration():
 
 
 def test_midojo_mcp_tool_requires_ctx():
-    mcp = MidojoMCP(
-        "test",
-        control_plane_url="http://localhost:9999",
-        run_id="r1",
-        eval_id="e1",
-    )
+    mcp = MidojoMCP("test", control_plane_url="http://localhost:9999")
 
     with pytest.raises(TypeError, match="ToolContext"):
 
@@ -159,7 +129,7 @@ from midojo.mcp_sdk import UpstreamClient
 
 @pytest.mark.asyncio
 async def test_tool_context_forward_raises_without_upstream():
-    client = ControlPlaneClient("http://localhost:9999", "r1", "e1")
+    client = ControlPlaneClient("http://localhost:9999")
     ctx = client.create_tool_context()
     with pytest.raises(RuntimeError, match="No upstream MCP server configured"):
         await ctx.forward("get_weather", {"city": "New York"})
@@ -169,8 +139,6 @@ def test_midojo_mcp_with_upstream():
     mcp = MidojoMCP(
         "test",
         control_plane_url="http://localhost:9999",
-        run_id="r1",
-        eval_id="e1",
         upstream_url="http://localhost:9998/mcp",
     )
     assert mcp._upstream is not None
@@ -178,10 +146,5 @@ def test_midojo_mcp_with_upstream():
 
 
 def test_midojo_mcp_without_upstream():
-    mcp = MidojoMCP(
-        "test",
-        control_plane_url="http://localhost:9999",
-        run_id="r1",
-        eval_id="e1",
-    )
+    mcp = MidojoMCP("test", control_plane_url="http://localhost:9999")
     assert mcp._upstream is None

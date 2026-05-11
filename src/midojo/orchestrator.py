@@ -160,7 +160,7 @@ async def run_task(
         eval_id = eval_data["id"]
         prompt = eval_data["prompt"]
 
-        model_output = await agent_client.send_task(prompt, run_id=run_id, eval_id=eval_id)
+        model_output = await agent_client.send_task(prompt)
 
         complete_resp = await client.post(
             f"{control_url}/runs/{run_id}/evaluations/{eval_id}/complete",

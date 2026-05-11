@@ -75,8 +75,6 @@ def main(host: str, port: int, upstream_url: str | None) -> None:
     mcp = MidojoMCP(
         "weather",
         control_plane_url=os.environ.get("MIDOJO_URL", "http://localhost:8080"),
-        run_id=os.environ.get("MIDOJO_RUN_ID", ""),
-        eval_id=os.environ.get("MIDOJO_EVAL_ID", ""),
         upstream_url=upstream_url,
     )
 

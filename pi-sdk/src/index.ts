@@ -25,31 +25,25 @@ export interface MidojoToolHook {
 
 export interface MidojoExtensionConfig {
 	controlPlaneUrl: string;
-	runId: string;
-	evalId: string;
 	tools?: MidojoToolDef[];
 	hooks?: MidojoToolHook[];
 }
 
 class ControlPlaneClient {
 	private baseUrl: string;
-	private envCache: Record<string, unknown> | null = null;
 
-	constructor(baseUrl: string, runId: string, evalId: string) {
+	constructor(baseUrl: string) {
 		const base = baseUrl.replace(/\/+$/, "");
-		this.baseUrl = `${base}/runs/${runId}/evaluations/${evalId}`;
+		this.baseUrl = `${base}/current`;
 	}
 
 	async getEnvironment(): Promise<Record<string, unknown>> {
-		if (this.envCache) return this.envCache;
 		const resp = await fetch(`${this.baseUrl}/environment`);
 		if (!resp.ok) return {};
-		this.envCache = (await resp.json()) as Record<string, unknown>;
-		return this.envCache;
+		return (await resp.json()) as Record<string, unknown>;
 	}
 
 	async putEnvironment(env: Record<string, unknown>): Promise<void> {
-		this.envCache = env;
 		await fetch(`${this.baseUrl}/environment`, {
 			method: "PUT",
 			headers: { "Content-Type": "application/json" },
@@ -82,7 +76,7 @@ class ControlPlaneClient {
 
 export function createMidojoExtension(config: MidojoExtensionConfig): (pi: ExtensionAPI) => void {
 	return (pi: ExtensionAPI) => {
-		const client = new ControlPlaneClient(config.controlPlaneUrl, config.runId, config.evalId);
+		const client = new ControlPlaneClient(config.controlPlaneUrl);
 
 		for (const toolDef of config.tools ?? []) {
 			pi.registerTool({

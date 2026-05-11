@@ -19,4 +19,5 @@ def create_app(suite_instance: YAMLTaskSuite) -> FastAPI:
     app.include_router(tools.router)
     runs.register_environment_update_route(suite_instance.environment_type)
     app.include_router(runs.router)
+    app.include_router(runs.current_router)
     return app
