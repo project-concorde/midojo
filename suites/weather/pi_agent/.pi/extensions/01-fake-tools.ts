@@ -1,4 +1,4 @@
-import { createMidojoExtension } from "../../../../../../../pi-sdk/src";
+import { createMidojoExtension } from "../../../../../pi-sdk/src";
 import { Type } from "typebox";
 
 export default createMidojoExtension({
