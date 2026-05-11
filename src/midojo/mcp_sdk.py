@@ -73,21 +73,13 @@ class ControlPlaneClient:
         base = base_url.rstrip("/")
         self._base_url = f"{base}/current"
         self._http = http or httpx.AsyncClient()
-        self._env_cache: dict[str, Any] | None = None
-
-    def clear_env_cache(self) -> None:
-        self._env_cache = None
 
     async def get_environment(self) -> dict[str, Any]:
-        if self._env_cache is not None:
-            return self._env_cache
         resp = await self._http.get(f"{self._base_url}/environment")
         resp.raise_for_status()
-        self._env_cache = resp.json()
-        return self._env_cache
+        return resp.json()
 
     async def put_environment(self, env: dict[str, Any]) -> None:
-        self._env_cache = env
         resp = await self._http.put(
             f"{self._base_url}/environment",
             json=env,
@@ -159,7 +151,6 @@ class MidojoMCP:
 
             @functools.wraps(fn)
             async def wrapper(**kwargs):
-                self._client.clear_env_cache()
                 ctx = self._client.create_tool_context(upstream=self._upstream)
                 result: str = ""
                 error: str | None = None

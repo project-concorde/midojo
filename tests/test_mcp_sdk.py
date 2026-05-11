@@ -148,25 +148,3 @@ def test_midojo_mcp_with_upstream():
 def test_midojo_mcp_without_upstream():
     mcp = MidojoMCP("test", control_plane_url="http://localhost:9999")
     assert mcp._upstream is None
-
-
-@pytest.mark.asyncio
-async def test_clear_env_cache_forces_refetch(eval_context, app):
-    cp, run_id, eval_id = eval_context
-    client = _make_client(app)
-
-    first = await client.get_environment()
-    assert first.get("weather_alerts") == []
-
-    cp.put(
-        f"/runs/{run_id}/evaluations/{eval_id}/environment",
-        json={**first, "weather_alerts": [{"city": "Boston", "message": "blizzard"}]},
-    )
-
-    # Without clearing, cache returns the stale value.
-    cached = await client.get_environment()
-    assert cached["weather_alerts"] == []
-
-    client.clear_env_cache()
-    fresh = await client.get_environment()
-    assert fresh["weather_alerts"] == [{"city": "Boston", "message": "blizzard"}]
