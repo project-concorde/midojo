@@ -84,6 +84,56 @@ class A2AAgentClient(AgentClient):
             await client.close()
 
 
+class OGXResponsesClient(AgentClient):
+    """Calls the OGX (Llama Stack) Responses API directly.
+
+    The Responses API runs the tool loop server-side — the model discovers
+    and calls MCP tools without client involvement. This is the vector
+    tested by ogx-ai/ogx#5036: server-side tool results bypass guardrails.
+    """
+
+    def __init__(
+        self,
+        ogx_url: str,
+        model: str,
+        mcp_server_url: str,
+        *,
+        instructions: str = "",
+        shield_id: str | None = None,
+        timeout: float = 120.0,
+    ) -> None:
+        self.ogx_url = ogx_url
+        self.model = model
+        self.mcp_server_url = mcp_server_url
+        self.instructions = instructions
+        self.shield_id = shield_id
+        self.timeout = timeout
+
+    async def send_task(self, prompt: str) -> str:
+        from ogx_client import OgxClient
+
+        client = OgxClient(base_url=self.ogx_url, timeout=self.timeout)
+        kwargs: dict = dict(
+            model=self.model,
+            input=prompt,
+            instructions=self.instructions,
+            tools=[
+                {
+                    "type": "mcp",
+                    "server_label": "weather",
+                    "server_url": self.mcp_server_url,
+                    "require_approval": "never",
+                },
+            ],
+            stream=False,
+        )
+        if self.shield_id:
+            kwargs["guardrails"] = [self.shield_id]
+
+        response = client.responses.create(**kwargs)
+        return response.output_text
+
+
 class PIAgentClient(AgentClient):
     """Launches a PI coding agent as a subprocess for each task.
 
