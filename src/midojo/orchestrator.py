@@ -4,6 +4,7 @@ import asyncio
 import importlib
 import json
 import os
+from collections import Counter
 from pathlib import Path
 from typing import NamedTuple
 
@@ -239,8 +240,10 @@ async def run_benchmark(
                 console.print("    ", _utility(result["utility"]))
                 if hit_functions:
                     security_results[TaskPair(ut_id, it_id)] = result["security"]
-                    via = ", ".join(hit_functions)
-                    console.print("    ", _security(result["security"]), Text(f"  ({via})", style="dim"))
+                    counts = Counter(hit_functions)
+                    parts = [f"{fn} x{n}" if n > 1 else fn for fn, n in counts.items()]
+                    via = ", ".join(parts)
+                    console.print("    ", _security(result["security"]), Text(f"  (injection in {via})", style="dim"))
                 else:
                     console.print("    ", Text("N/A (payload not in any result)", style="dim"))
 
