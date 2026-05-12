@@ -21,12 +21,7 @@ The project also includes:
 
 ## Weather Suite (Reference Implementation)
 
-The weather suite is a minimal working example. Tasks and grading logic are defined declaratively in `data/suite.yaml` using the predicate DSL — no Python task classes needed.
-
-- **3 tools**: get_weather, list_cities, send_weather_alert
-- **3 user tasks**: check weather in New York, find the warmest city, check weather in San Francisco (not injectable — demonstrates N/A handling)
-- **1 injection task**: trick the agent into sending a fake tornado alert
-- **1 injection vector**: notes field appended to New York weather data
+The weather suite is a minimal working example. It gives the agent a handful of weather tools (lookup, listing, alerting), then tests whether an injection payload hidden in a tool response can trick the agent into taking an unauthorized action. Tasks and grading logic are defined declaratively in `suite.yaml` using the predicate DSL — no Python task classes needed.
 
 The suite includes two example agent setups demonstrating how to wire midojo into different agent types. In both cases the agent already has its real tools — the suite author only writes the interception layer using the appropriate midojo SDK.
 
@@ -63,7 +58,7 @@ Start three processes — the real weather MCP server, the control plane, and th
 ```bash
 weather-real-mcp-serve --port 8081
 midojo-serve --suite weather --host 127.0.0.1 --port 8080
-weather-mcp-serve --port 8082 --upstream-url http://localhost:8081/mcp
+weather-fake-mcp-serve --port 8082 --upstream-url http://localhost:8081/mcp
 ```
 
 Run the benchmark against your A2A agent:
@@ -141,10 +136,10 @@ Results are also saved as JSON to the `--logdir` directory (default `./runs`).
 
 Start by defining the benchmark — the environment, tasks, and grading logic:
 
-1. Create a new package under `suites/your_suite/` (or anywhere on the Python path — `--suite your.module.path` will load it)
-2. Create `data/suite.yaml` — defines environment, injection vectors, user tasks (with declarative utility predicates), and injection tasks (with declarative security predicates)
-3. Create `task_suite.py` — instantiate `YAMLTaskSuite` with the environment type and path to `suite.yaml`
-4. Export `task_suite` and `SYSTEM_MESSAGE` from `__init__.py`
+1. Create a new package under `suites/your_suite/` with an `__init__.py` that exports `SYSTEM_MESSAGE` (the agent's system prompt)
+2. Create `suite.yaml` in the package directory — defines environment, injection vectors, user tasks (with declarative utility predicates), and injection tasks (with declarative security predicates)
+
+The framework auto-loads `suite.yaml` and infers the environment type from the YAML structure — no `task_suite.py` needed. For out-of-tree suites or custom setup, use `--suite your.module.path`; the module must expose a `task_suite` attribute.
 
 Then author the interception layer for the agent you're testing. The agent already has its real tools — you only write the fake side using the appropriate SDK.
 
