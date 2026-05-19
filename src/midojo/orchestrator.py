@@ -199,7 +199,7 @@ async def run_benchmark(
     user_task_ids: list[str] | None,
     injection_task_ids: list[str] | None,
     logdir: Path,
-    show_output: bool = False,
+    show_output: bool = True,
 ) -> SuiteResults:
     user_tasks_to_run = user_task_ids or list(suite.user_tasks.keys())
     injection_tasks_to_run: list[str]
@@ -294,7 +294,7 @@ async def run_benchmark(
 @click.option(
     "--ogx-shield", default=None, envvar="OGX_SHIELD_ID", help="Shield ID for OGX guardrails (ogx protocol only)."
 )
-@click.option("--show-agent-output", is_flag=True, default=False, help="Print agent output for each task.")
+@click.option("--hide-agent-output", is_flag=True, default=False, help="Suppress agent output in console.")
 def main(
     control_url: str,
     agent_url: str,
@@ -306,7 +306,7 @@ def main(
     protocol: str,
     ogx_model: str | None,
     ogx_shield: str | None,
-    show_agent_output: bool,
+    hide_agent_output: bool,
 ) -> None:
     for module in modules_to_load:
         importlib.import_module(module)
@@ -340,7 +340,7 @@ def main(
             user_task_ids=list(user_tasks) if user_tasks else None,
             injection_task_ids=list(injection_tasks) if injection_tasks else None,
             logdir=logdir,
-            show_output=show_agent_output,
+            show_output=not hide_agent_output,
         )
     )
 
