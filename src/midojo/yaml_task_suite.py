@@ -31,6 +31,13 @@ class MiDojoInjectionTask(BaseInjectionTask):
     `attack_type` on a probe is parsed and validated at suite-load time but
     only `verbatim` is currently supported — the placeholder is for future
     wrapping strategies (e.g. `important_instructions`).
+
+    NOTE: subclassing agentdojo's BaseInjectionTask is awkward now that the
+    attack layer is gone — what we inherit is mostly bureaucratic (numeric
+    class-name constraint enforced by TaskSuite._get_task_number, unused
+    GOAL annotation, unused BenchmarkVersion machinery). The plan is to
+    drop this inheritance (and YAMLTaskSuite's TaskSuite inheritance) in
+    a follow-up, which would also unlock descriptive task ids.
     """
 
     DESCRIPTION: str = ""
