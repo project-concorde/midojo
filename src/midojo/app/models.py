@@ -100,7 +100,7 @@ class TaskDetailResponse(BaseModel):
     id: str
     type: str
     prompt: str | None = None
-    goal: str | None = None
+    description: str | None = None
     ground_truth: list[GroundTruthCall]
 
 

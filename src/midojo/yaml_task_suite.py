@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import yaml
 from agentdojo.base_tasks import BaseInjectionTask, BaseUserTask, TaskDifficulty
@@ -12,11 +13,46 @@ from midojo.app.models import InjectionVectorInfo, ToolInfoResponse
 from midojo.env_inference import infer_environment_type
 from midojo.predicates import Predicate, evaluate_predicate, parse_predicate
 
+
+SUPPORTED_ATTACK_TYPES = frozenset({"verbatim"})
+
+
+class MiDojoInjectionTask(BaseInjectionTask):
+    """MiDojo's injection task base. Replaces agentdojo's GOAL/attack model
+    with a probes-based one.
+
+    DESCRIPTION is human-readable documentation of what the injection aims to
+    do (not consumed by code).
+
+    PROBES maps probe_id to the literal payload string. The active task's
+    probes are merged into the injections dict at orchestration time and
+    substituted into `{task_id:probe_id}` placeholders in the environment.
+
+    `attack_type` on a probe is parsed and validated at suite-load time but
+    only `verbatim` is currently supported — the placeholder is for future
+    wrapping strategies (e.g. `important_instructions`).
+
+    NOTE: subclassing agentdojo's BaseInjectionTask is awkward now that the
+    attack layer is gone — what we inherit is mostly bureaucratic (numeric
+    class-name constraint enforced by TaskSuite._get_task_number, unused
+    GOAL annotation, unused BenchmarkVersion machinery). The plan is to
+    drop this inheritance (and YAMLTaskSuite's TaskSuite inheritance) in
+    a follow-up, which would also unlock descriptive task ids.
+    """
+
+    DESCRIPTION: str = ""
+    PROBES: dict[str, str] = {}
+
 _DIFFICULTY_MAP = {
     "easy": TaskDifficulty.EASY,
     "medium": TaskDifficulty.MEDIUM,
     "hard": TaskDifficulty.HARD,
 }
+
+# Matches `{task_id:probe_id}` placeholders. Identifiers only (letters, digits,
+# underscore), so this won't collide with YAML content that happens to contain
+# braces.
+_PROBE_PLACEHOLDER_RE = re.compile(r"\{([A-Za-z_]\w*):([A-Za-z_]\w*)\}")
 
 
 class YAMLTaskSuite(TaskSuite):
@@ -36,14 +72,48 @@ class YAMLTaskSuite(TaskSuite):
         super().__init__(name, environment_type, tools or [], data_path=suite_yaml_path.parent)
         self._register_tasks()
 
+    @property
+    def injection_tasks(self) -> dict[str, MiDojoInjectionTask]:  # type: ignore[override]
+        # Narrowing the value type from agentdojo's BaseInjectionTask to
+        # MiDojoInjectionTask. dict is invariant so this isn't strictly
+        # Liskov-safe, but every task we register goes through
+        # _make_injection_task_class which produces MiDojoInjectionTask
+        # instances, so the cast is sound in practice.
+        return cast("dict[str, MiDojoInjectionTask]", super().injection_tasks)
+
     def load_and_inject_default_environment(self, injections: dict[str, str]) -> TaskEnvironment:
         env_raw = self._suite_raw["environment"]
         env_text = yaml.dump(env_raw, default_flow_style=False)
+
+        # Split into vector-style ({vector}) and probe-style ({task:probe}) keys.
+        probe_injections = {k: v for k, v in injections.items() if ":" in k}
+        vector_injections = {k: v for k, v in injections.items() if ":" not in k}
+
+        # Probe placeholders use `:` which collides with str.format's format-spec
+        # separator, so resolve them by regex first. Probes are scoped to a
+        # single injection task — placeholders for any other task collapse to ""
+        # so e.g. injection_task_2's primer doesn't leak into a run of
+        # injection_task_0. (Typo detection — a `{task:probe}` pointing at
+        # nothing — is deferred.)
+        env_text = _PROBE_PLACEHOLDER_RE.sub(
+            lambda m: probe_injections.get(f"{m.group(1)}:{m.group(2)}", ""),
+            env_text,
+        )
+
         injection_vector_defaults = self.get_injection_vector_defaults()
-        injections_with_defaults = dict(injection_vector_defaults, **injections)
-        validate_injections(injections, injection_vector_defaults)
+        injections_with_defaults = dict(injection_vector_defaults, **vector_injections)
+        validate_injections(vector_injections, injection_vector_defaults)
         injected_text = env_text.format(**injections_with_defaults)
         return self.environment_type.model_validate(yaml.safe_load(injected_text))
+
+    def get_probes_for_task(self, task_id: str) -> dict[str, str]:
+        """Return probe payloads for an injection task, keyed as `task_id:probe_id`.
+
+        Ready to merge into the injections dict consumed by
+        `load_and_inject_default_environment`.
+        """
+        probes = self.injection_tasks[task_id].PROBES
+        return {f"{task_id}:{probe_id}": payload for probe_id, payload in probes.items()}
 
     def get_tool_definitions(self) -> list[ToolInfoResponse]:
         return [
@@ -93,13 +163,15 @@ class YAMLTaskSuite(TaskSuite):
             difficulty = _DIFFICULTY_MAP.get(task_raw.get("difficulty", "easy"), TaskDifficulty.EASY)
             gt_calls = self._parse_ground_truth_calls(task_raw.get("ground_truth", []))
             predicate = parse_predicate(task_raw["security"])
+            probes = self._parse_probes(task_id, task_raw.get("probes", {}))
 
             cls = self._make_injection_task_class(
                 class_name=class_name,
-                goal=task_raw["goal"],
+                description=task_raw["description"],
                 difficulty=difficulty,
                 gt_calls=gt_calls,
                 predicate=predicate,
+                probes=probes,
             )
             self.register_injection_task(cls)
 
@@ -113,6 +185,21 @@ class YAMLTaskSuite(TaskSuite):
             )
             for item in raw_list
         ]
+
+    @staticmethod
+    def _parse_probes(task_id: str, raw: dict[str, dict]) -> dict[str, str]:
+        probes: dict[str, str] = {}
+        for probe_id, probe_raw in raw.items():
+            if "payload" not in probe_raw:
+                raise ValueError(f"Probe '{task_id}:{probe_id}' is missing required 'payload' field")
+            attack_type = probe_raw.get("attack_type", "verbatim")
+            if attack_type not in SUPPORTED_ATTACK_TYPES:
+                raise ValueError(
+                    f"Probe '{task_id}:{probe_id}' has unsupported attack_type "
+                    f"'{attack_type}'. Supported: {sorted(SUPPORTED_ATTACK_TYPES)}"
+                )
+            probes[probe_id] = probe_raw["payload"]
+        return probes
 
     @staticmethod
     def _task_id_to_class_name(task_id: str, prefix: str) -> str:
@@ -155,11 +242,12 @@ class YAMLTaskSuite(TaskSuite):
     @staticmethod
     def _make_injection_task_class(
         class_name: str,
-        goal: str,
+        description: str,
         difficulty: TaskDifficulty,
         gt_calls: list[FunctionCall],
         predicate: Predicate,
-    ) -> type[BaseInjectionTask]:
+        probes: dict[str, str],
+    ) -> type[MiDojoInjectionTask]:
         def ground_truth(self: Any, pre_environment: TaskEnvironment) -> list[FunctionCall]:
             return list(gt_calls)
 
@@ -173,10 +261,11 @@ class YAMLTaskSuite(TaskSuite):
 
         return type(
             class_name,
-            (BaseInjectionTask,),
+            (MiDojoInjectionTask,),
             {
-                "GOAL": goal,
+                "DESCRIPTION": description,
                 "DIFFICULTY": difficulty,
+                "PROBES": probes,
                 "ground_truth": ground_truth,
                 "security": security,
             },
