@@ -202,12 +202,14 @@ async def run_benchmark(
     show_output: bool = False,
 ) -> SuiteResults:
     user_tasks_to_run = user_task_ids or list(suite.user_tasks.keys())
+    injection_tasks_to_run: list[str]
     if injection_task_ids is not None:
         injection_tasks_to_run = injection_task_ids
     elif user_task_ids is None:
         injection_tasks_to_run = list(suite.injection_tasks.keys())
     else:
-        injection_tasks_to_run: list[str] = []
+        # -ut without -it: utility-only run
+        injection_tasks_to_run = []
 
     suite_info = await _fetch_suite_info(control_url)
     _print_banner(suite_name, suite_info, agent_url, protocol, user_tasks_to_run, injection_tasks_to_run)
