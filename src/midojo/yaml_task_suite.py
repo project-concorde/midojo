@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, cast
 
 import yaml
-from agentdojo.base_tasks import BaseInjectionTask, BaseUserTask, TaskDifficulty
+from agentdojo.base_tasks import BaseInjectionTask, BaseUserTask
 from agentdojo.functions_runtime import Function, FunctionCall, TaskEnvironment
 from agentdojo.task_suite.task_suite import TaskSuite
 
@@ -38,11 +38,6 @@ class MiDojoInjectionTask(BaseInjectionTask):
     DESCRIPTION: str = ""
     PROBES: dict[str, str] = {}
 
-_DIFFICULTY_MAP = {
-    "easy": TaskDifficulty.EASY,
-    "medium": TaskDifficulty.MEDIUM,
-    "hard": TaskDifficulty.HARD,
-}
 
 # Matches `{task_id:probe_id}` placeholders. Identifiers only (letters, digits,
 # underscore), so this won't collide with YAML content that happens to contain
@@ -118,7 +113,6 @@ class YAMLTaskSuite(TaskSuite):
         for task_raw in self._suite_raw.get("user_tasks", []):
             task_id = task_raw["id"]
             class_name = self._task_id_to_class_name(task_id, "UserTask")
-            difficulty = _DIFFICULTY_MAP.get(task_raw.get("difficulty", "easy"), TaskDifficulty.EASY)
             gt_calls = self._parse_ground_truth_calls(task_raw.get("ground_truth", []))
             predicate = parse_predicate(task_raw["utility"])
 
@@ -126,7 +120,6 @@ class YAMLTaskSuite(TaskSuite):
                 class_name=class_name,
                 prompt=task_raw["prompt"],
                 ground_truth_output=task_raw.get("ground_truth_output", ""),
-                difficulty=difficulty,
                 gt_calls=gt_calls,
                 predicate=predicate,
             )
@@ -135,7 +128,6 @@ class YAMLTaskSuite(TaskSuite):
         for task_raw in self._suite_raw.get("injection_tasks", []):
             task_id = task_raw["id"]
             class_name = self._task_id_to_class_name(task_id, "InjectionTask")
-            difficulty = _DIFFICULTY_MAP.get(task_raw.get("difficulty", "easy"), TaskDifficulty.EASY)
             gt_calls = self._parse_ground_truth_calls(task_raw.get("ground_truth", []))
             predicate = parse_predicate(task_raw["security"])
             probes = self._parse_probes(task_id, task_raw.get("probes", {}))
@@ -143,7 +135,6 @@ class YAMLTaskSuite(TaskSuite):
             cls = self._make_injection_task_class(
                 class_name=class_name,
                 description=task_raw["description"],
-                difficulty=difficulty,
                 gt_calls=gt_calls,
                 predicate=predicate,
                 probes=probes,
@@ -185,7 +176,6 @@ class YAMLTaskSuite(TaskSuite):
         class_name: str,
         prompt: str,
         ground_truth_output: str,
-        difficulty: TaskDifficulty,
         gt_calls: list[FunctionCall],
         predicate: Predicate,
     ) -> type[BaseUserTask]:
@@ -207,7 +197,6 @@ class YAMLTaskSuite(TaskSuite):
             {
                 "PROMPT": prompt,
                 "GROUND_TRUTH_OUTPUT": ground_truth_output,
-                "DIFFICULTY": difficulty,
                 "ground_truth": ground_truth,
                 "utility": utility,
             },
@@ -217,7 +206,6 @@ class YAMLTaskSuite(TaskSuite):
     def _make_injection_task_class(
         class_name: str,
         description: str,
-        difficulty: TaskDifficulty,
         gt_calls: list[FunctionCall],
         predicate: Predicate,
         probes: dict[str, str],
@@ -238,7 +226,6 @@ class YAMLTaskSuite(TaskSuite):
             (MiDojoInjectionTask,),
             {
                 "DESCRIPTION": description,
-                "DIFFICULTY": difficulty,
                 "PROBES": probes,
                 "ground_truth": ground_truth,
                 "security": security,
