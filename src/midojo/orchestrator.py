@@ -198,15 +198,18 @@ async def run_benchmark(
     suite_name: str,
     user_task_ids: list[str] | None,
     injection_task_ids: list[str] | None,
-    no_injections: bool,
     logdir: Path,
     show_output: bool = False,
 ) -> SuiteResults:
     user_tasks_to_run = user_task_ids or list(suite.user_tasks.keys())
-    if no_injections:
-        injection_tasks_to_run: list[str] = []
+    injection_tasks_to_run: list[str]
+    if injection_task_ids is not None:
+        injection_tasks_to_run = injection_task_ids
+    elif user_task_ids is None:
+        injection_tasks_to_run = list(suite.injection_tasks.keys())
     else:
-        injection_tasks_to_run = injection_task_ids or list(suite.injection_tasks.keys())
+        # -ut without -it: utility-only run
+        injection_tasks_to_run = []
 
     suite_info = await _fetch_suite_info(control_url)
     _print_banner(suite_name, suite_info, agent_url, protocol, user_tasks_to_run, injection_tasks_to_run)
@@ -278,7 +281,6 @@ async def run_benchmark(
 @click.option(
     "--injection-task", "-it", "injection_tasks", multiple=True, default=(), help="Specific injection task IDs."
 )
-@click.option("--no-injections", is_flag=True, default=False, help="Skip injection tasks (utility-only run).")
 @click.option("--logdir", default="./runs", type=Path, help="Directory to store results.")
 @click.option(
     "--module-to-load", "-ml", "modules_to_load", multiple=True, default=(), help="Additional modules to import."
@@ -299,7 +301,6 @@ def main(
     suite_name: str,
     user_tasks: tuple[str, ...],
     injection_tasks: tuple[str, ...],
-    no_injections: bool,
     logdir: Path,
     modules_to_load: tuple[str, ...],
     protocol: str,
@@ -338,7 +339,6 @@ def main(
             suite_name=suite_name,
             user_task_ids=list(user_tasks) if user_tasks else None,
             injection_task_ids=list(injection_tasks) if injection_tasks else None,
-            no_injections=no_injections,
             logdir=logdir,
             show_output=show_agent_output,
         )
