@@ -10,7 +10,6 @@ from typing import NamedTuple
 
 import click
 import httpx
-from agentdojo.benchmark import SuiteResults
 from midojo.yaml_task_suite import YAMLTaskSuite
 from rich.console import Console
 from rich.panel import Panel
@@ -200,7 +199,7 @@ async def run_benchmark(
     user_task_ids: list[str] | None,
     injection_task_ids: list[str] | None,
     logdir: Path,
-) -> SuiteResults:
+) -> None:
     user_tasks_to_run = user_task_ids or list(suite.user_tasks.keys())
     injection_tasks_to_run: list[str]
     if injection_task_ids is not None:
@@ -260,12 +259,6 @@ async def run_benchmark(
         )
 
     _print_results_table(utility_results, security_results, bool(injection_tasks_to_run), results_file)
-
-    return SuiteResults(
-        utility_results=utility_results,
-        security_results=security_results,
-        injection_tasks_utility_results={},
-    )
 
 
 @click.command()
