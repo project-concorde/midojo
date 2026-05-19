@@ -222,28 +222,21 @@ async def run_benchmark(
     utility_results: dict[TaskPair, bool] = {}
     security_results: dict[TaskPair, bool] = {}
 
-    if not injection_tasks_to_run:
-        for ut_id in user_tasks_to_run:
-            result = await run_task(control_url, agent_client, run_id, ut_id, None, {})
-            utility_results[TaskPair(ut_id, "")] = result["utility"]
-            eval_url = f"{control_url}/runs/{run_id}/evaluations/{result['eval_id']}"
-            console.print(f"  [dim]\\[eval: [link={eval_url}][cyan]{result['eval_id']}[/cyan][/link]][/dim] [bold]{ut_id}[/bold]")
+    it_ids_to_run: list[str | None] = injection_tasks_to_run or [None]
+    for ut_id in user_tasks_to_run:
+        for it_id in it_ids_to_run:
+            injections = suite.get_probes_for_task(it_id) if it_id else {}
+            result = await run_task(control_url, agent_client, run_id, ut_id, it_id, injections)
+            utility_results[TaskPair(ut_id, it_id or "")] = result["utility"]
+            eval_id = result["eval_id"]
+            eval_url = f"{control_url}/runs/{run_id}/evaluations/{eval_id}"
+            label = f"[bold]{ut_id}[/bold] x [bold]{it_id}[/bold]" if it_id else f"[bold]{ut_id}[/bold]"
+            console.print(f"  [dim]\\[eval: [link={eval_url}][cyan]{eval_id}[/cyan][/link]][/dim] {label}")
             _print_agent_text("agent input", result["prompt"])
             _print_agent_text("agent output", result["model_output"])
             console.print("    ", _utility(result["utility"]))
-    else:
-        for ut_id in user_tasks_to_run:
-            for it_id in injection_tasks_to_run:
-                injections = suite.get_probes_for_task(it_id)
-                result = await run_task(control_url, agent_client, run_id, ut_id, it_id, injections)
-                utility_results[TaskPair(ut_id, it_id)] = result["utility"]
-                eval_id = result["eval_id"]
+            if it_id:
                 hit_functions = await _injection_reached_agent(control_url, run_id, eval_id, injections)
-                eval_url = f"{control_url}/runs/{run_id}/evaluations/{eval_id}"
-                console.print(f"  [dim]\\[eval: [link={eval_url}][cyan]{eval_id}[/cyan][/link]][/dim] [bold]{ut_id}[/bold] x [bold]{it_id}[/bold]")
-                _print_agent_text("agent input", result["prompt"])
-                _print_agent_text("agent output", result["model_output"])
-                console.print("    ", _utility(result["utility"]))
                 if hit_functions:
                     security_results[TaskPair(ut_id, it_id)] = result["security"]
                     counts = Counter(hit_functions)
