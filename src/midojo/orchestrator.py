@@ -18,7 +18,6 @@ from rich.table import Table
 from rich.text import Text
 
 from midojo.agent_client import A2AAgentClient, AgentClient, OGXResponsesClient, PIAgentClient, SimpleHTTPAgentClient
-from midojo.attack import create_attack
 from midojo.suites import get_suite
 
 console = Console()
@@ -63,7 +62,6 @@ async def _create_run(control_url: str) -> str:
 def _print_banner(
     suite_name: str,
     suite_info: dict,
-    attack_name: str | None,
     agent_url: str,
     protocol: str,
     user_tasks_to_run: list[str],
@@ -72,12 +70,13 @@ def _print_banner(
     lines = Text()
     lines.append("Suite       ", style="dim")
     lines.append(f"{suite_name}\n")
-    lines.append("Attack      ", style="dim")
-    lines.append(f"{attack_name or 'none'}\n")
     lines.append("Agent       ", style="dim")
     lines.append(f"{agent_url} ({protocol})\n")
     lines.append("Tasks       ", style="dim")
-    lines.append(f"{len(user_tasks_to_run)} user x {len(injection_tasks_to_run)} injection\n")
+    if injection_tasks_to_run:
+        lines.append(f"{len(user_tasks_to_run)} user x {len(injection_tasks_to_run)} injection\n")
+    else:
+        lines.append(f"{len(user_tasks_to_run)} user (no injections)\n")
     lines.append("Tools       ", style="dim")
     lines.append(f"{', '.join(suite_info['tools'])}\n")
     lines.append("Vectors     ", style="dim")
@@ -90,20 +89,20 @@ def _print_banner(
 def _print_results_table(
     utility_results: dict[TaskPair, bool],
     security_results: dict[TaskPair, bool],
-    attack_name: str | None,
+    has_injections: bool,
     results_file: Path,
 ) -> None:
     table = Table(title="Results", border_style="cyan", show_lines=True)
     table.add_column("User Task", style="bold")
-    if attack_name:
+    if has_injections:
         table.add_column("Injection Task")
     table.add_column("Utility", justify="center")
-    if attack_name:
+    if has_injections:
         table.add_column("Security", justify="center")
 
     for pair, util in utility_results.items():
         sec = security_results.get(pair)
-        if attack_name:
+        if has_injections:
             sec_cell = _security(sec) if sec is not None else Text("N/A", style="dim")
             table.add_row(pair.user_task_id, pair.injection_task_id, _utility(util), sec_cell)
         else:
@@ -119,7 +118,7 @@ def _print_results_table(
     else:
         sec_avg = "-"
 
-    if attack_name:
+    if has_injections:
         table.add_row("", "", Text(util_avg, style="bold"), Text(sec_avg, style="bold"))
     else:
         table.add_row("", Text(util_avg, style="bold"))
@@ -197,17 +196,20 @@ async def run_benchmark(
     protocol: str,
     suite: YAMLTaskSuite,
     suite_name: str,
-    attack_name: str | None,
     user_task_ids: list[str] | None,
     injection_task_ids: list[str] | None,
+    no_injections: bool,
     logdir: Path,
     show_output: bool = False,
 ) -> SuiteResults:
     user_tasks_to_run = user_task_ids or list(suite.user_tasks.keys())
-    injection_tasks_to_run = injection_task_ids or list(suite.injection_tasks.keys())
+    if no_injections:
+        injection_tasks_to_run: list[str] = []
+    else:
+        injection_tasks_to_run = injection_task_ids or list(suite.injection_tasks.keys())
 
     suite_info = await _fetch_suite_info(control_url)
-    _print_banner(suite_name, suite_info, attack_name, agent_url, protocol, user_tasks_to_run, injection_tasks_to_run)
+    _print_banner(suite_name, suite_info, agent_url, protocol, user_tasks_to_run, injection_tasks_to_run)
 
     run_id = await _create_run(control_url)
     console.print(f"  [dim]run[/dim] [cyan underline]{run_id}[/cyan underline]\n")
@@ -215,7 +217,7 @@ async def run_benchmark(
     utility_results: dict[TaskPair, bool] = {}
     security_results: dict[TaskPair, bool] = {}
 
-    if attack_name is None:
+    if not injection_tasks_to_run:
         for ut_id in user_tasks_to_run:
             result = await run_task(control_url, agent_client, run_id, ut_id, None, {})
             utility_results[TaskPair(ut_id, "")] = result["utility"]
@@ -224,13 +226,9 @@ async def run_benchmark(
                 _print_agent_output(result["model_output"])
             console.print("    ", _utility(result["utility"]))
     else:
-        attack = create_attack(attack_name, suite)
         for ut_id in user_tasks_to_run:
-            user_task = suite.user_tasks[ut_id]
             for it_id in injection_tasks_to_run:
-                injection_task = suite.injection_tasks[it_id]
-                injections = attack.attack(user_task, injection_task)
-                injections.update(suite.get_probes_for_task(it_id))
+                injections = suite.get_probes_for_task(it_id)
                 result = await run_task(control_url, agent_client, run_id, ut_id, it_id, injections)
                 utility_results[TaskPair(ut_id, it_id)] = result["utility"]
                 eval_id = result["eval_id"]
@@ -263,7 +261,7 @@ async def run_benchmark(
             indent=2,
         )
 
-    _print_results_table(utility_results, security_results, attack_name, results_file)
+    _print_results_table(utility_results, security_results, bool(injection_tasks_to_run), results_file)
 
     return SuiteResults(
         utility_results=utility_results,
@@ -276,11 +274,11 @@ async def run_benchmark(
 @click.option("--control-url", default="http://localhost:8080", help="URL of the benchmark MCP server control plane.")
 @click.option("--agent-url", required=True, help="URL of the agent to test.")
 @click.option("--suite", "suite_name", default="weather", help="Benchmark suite name.")
-@click.option("--attack", "attack_name", type=str, default=None, help="Attack strategy name.")
 @click.option("--user-task", "-ut", "user_tasks", multiple=True, default=(), help="Specific user task IDs.")
 @click.option(
     "--injection-task", "-it", "injection_tasks", multiple=True, default=(), help="Specific injection task IDs."
 )
+@click.option("--no-injections", is_flag=True, default=False, help="Skip injection tasks (utility-only run).")
 @click.option("--logdir", default="./runs", type=Path, help="Directory to store results.")
 @click.option(
     "--module-to-load", "-ml", "modules_to_load", multiple=True, default=(), help="Additional modules to import."
@@ -299,9 +297,9 @@ def main(
     control_url: str,
     agent_url: str,
     suite_name: str,
-    attack_name: str | None,
     user_tasks: tuple[str, ...],
     injection_tasks: tuple[str, ...],
+    no_injections: bool,
     logdir: Path,
     modules_to_load: tuple[str, ...],
     protocol: str,
@@ -338,9 +336,9 @@ def main(
             protocol=protocol,
             suite=suite,
             suite_name=suite_name,
-            attack_name=attack_name,
             user_task_ids=list(user_tasks) if user_tasks else None,
             injection_task_ids=list(injection_tasks) if injection_tasks else None,
+            no_injections=no_injections,
             logdir=logdir,
             show_output=show_agent_output,
         )

@@ -14,14 +14,26 @@ from midojo.env_inference import infer_environment_type
 from midojo.predicates import Predicate, evaluate_predicate, parse_predicate
 
 
-class MiDojoInjectionTask(BaseInjectionTask):
-    """MiDojo's injection task base. Adds PROBES on top of agentdojo's contract.
+SUPPORTED_ATTACK_TYPES = frozenset({"verbatim"})
 
-    PROBES maps probe_id to inline payload text. The active injection task's
+
+class MiDojoInjectionTask(BaseInjectionTask):
+    """MiDojo's injection task base. Replaces agentdojo's GOAL/attack model
+    with a probes-based one.
+
+    DESCRIPTION is human-readable documentation of what the injection aims to
+    do (not consumed by code).
+
+    PROBES maps probe_id to the literal payload string. The active task's
     probes are merged into the injections dict at orchestration time and
     substituted into `{task_id:probe_id}` placeholders in the environment.
+
+    `attack_type` on a probe is parsed and validated at suite-load time but
+    only `verbatim` is currently supported — the placeholder is for future
+    wrapping strategies (e.g. `important_instructions`).
     """
 
+    DESCRIPTION: str = ""
     PROBES: dict[str, str] = {}
 
 _DIFFICULTY_MAP = {
@@ -144,11 +156,11 @@ class YAMLTaskSuite(TaskSuite):
             difficulty = _DIFFICULTY_MAP.get(task_raw.get("difficulty", "easy"), TaskDifficulty.EASY)
             gt_calls = self._parse_ground_truth_calls(task_raw.get("ground_truth", []))
             predicate = parse_predicate(task_raw["security"])
-            probes = self._parse_probes(task_raw.get("probes", {}))
+            probes = self._parse_probes(task_id, task_raw.get("probes", {}))
 
             cls = self._make_injection_task_class(
                 class_name=class_name,
-                goal=task_raw["goal"],
+                description=task_raw["description"],
                 difficulty=difficulty,
                 gt_calls=gt_calls,
                 predicate=predicate,
@@ -168,11 +180,17 @@ class YAMLTaskSuite(TaskSuite):
         ]
 
     @staticmethod
-    def _parse_probes(raw: dict[str, dict]) -> dict[str, str]:
+    def _parse_probes(task_id: str, raw: dict[str, dict]) -> dict[str, str]:
         probes: dict[str, str] = {}
         for probe_id, probe_raw in raw.items():
             if "payload" not in probe_raw:
-                raise ValueError(f"Probe '{probe_id}' is missing required 'payload' field")
+                raise ValueError(f"Probe '{task_id}:{probe_id}' is missing required 'payload' field")
+            attack_type = probe_raw.get("attack_type", "verbatim")
+            if attack_type not in SUPPORTED_ATTACK_TYPES:
+                raise ValueError(
+                    f"Probe '{task_id}:{probe_id}' has unsupported attack_type "
+                    f"'{attack_type}'. Supported: {sorted(SUPPORTED_ATTACK_TYPES)}"
+                )
             probes[probe_id] = probe_raw["payload"]
         return probes
 
@@ -217,7 +235,7 @@ class YAMLTaskSuite(TaskSuite):
     @staticmethod
     def _make_injection_task_class(
         class_name: str,
-        goal: str,
+        description: str,
         difficulty: TaskDifficulty,
         gt_calls: list[FunctionCall],
         predicate: Predicate,
@@ -238,7 +256,7 @@ class YAMLTaskSuite(TaskSuite):
             class_name,
             (MiDojoInjectionTask,),
             {
-                "GOAL": goal,
+                "DESCRIPTION": description,
                 "DIFFICULTY": difficulty,
                 "PROBES": probes,
                 "ground_truth": ground_truth,

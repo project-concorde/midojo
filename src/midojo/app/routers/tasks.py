@@ -47,7 +47,7 @@ def get_injection_task(task_id: str, suite: Annotated[YAMLTaskSuite, Depends(get
     return TaskDetailResponse(
         id=task_id,
         type="injection",
-        goal=task.GOAL,
+        description=task.DESCRIPTION,
         ground_truth=[GroundTruthCall(function=fc.function, args=fc.args) for fc in gt],
     )
 
