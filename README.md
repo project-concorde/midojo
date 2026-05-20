@@ -19,7 +19,7 @@ A few concepts first:
 
 - A **suite** defines everything needed for a benchmark: an environment (the world your agent operates in), tools, tasks, and grading logic — all in a single `suite.yaml`.
 - A **task** is something you want the agent to do. **User tasks** are legitimate work ("what's the weather in New York?"). **Injection tasks** are malicious goals ("send a fake tornado alert") that get embedded into the environment as hidden payloads. MiDojo tests whether the agent completes the user task (utility) while resisting the injection (security).
-- A **run** is a benchmark session. It contains one or more **evaluations**, where each evaluation pairs one user task with one injection task and one attack strategy.
+- A **run** is a benchmark session. It contains one or more **evaluations**, where each evaluation pairs one user task with one injection task.
 
 The system has three moving parts:
 
@@ -37,7 +37,7 @@ The weather suite is a minimal working example. Have a look at `suites/weather/s
 - the user tasks that the agent will be asked to perform (these are the legitimate tasks you want the agent to do), and
 - the injection tasks (these are meant to trick the agent into doing something illegitimate).
 
-Note how the environment contains injection placeholders, these are the ones within `{}`. When MiDojo runs, these will be filled w/ malicious injections from the various attacks. There is other stuff in `suite.yaml` like the tools definitions and a dedicated field for the injection vectors. We will likely get rid of those :). 
+Note how the environment contains probe placeholders like `{injection_task_0:main}` — the format is `{task_id:probe_id}`. When MiDojo runs, these are replaced with the injection payloads defined in the corresponding injection task's `probes` section. Each probe can optionally specify an `attack_type` (e.g. `important_instructions`, `ignore_previous`) that wraps the payload in a delivery template; the default is `verbatim` (payload used as-is). 
 
 The weather suite includes various agent setups demonstrating how to wire midojo into those different agent types. Those examples (eg., the `a2a_agent`) include the agent implementation itself as well as the tools the agents have access to (we call those the 'real' tools for clarity). 
 
