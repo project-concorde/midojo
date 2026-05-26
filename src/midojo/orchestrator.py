@@ -16,7 +16,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from midojo.agent_client import A2AAgentClient, AgentClient, OGXResponsesClient, PIAgentClient, SimpleHTTPAgentClient
+from midojo.agent_client import A2AAgentClient, AgentClient, OGXResponsesClient, PIAgentClient, ShellOGXAgentClient, SimpleHTTPAgentClient
 from midojo.suites import get_suite
 
 console = Console()
@@ -274,7 +274,7 @@ async def run_benchmark(
     "--module-to-load", "-ml", "modules_to_load", multiple=True, default=(), help="Additional modules to import."
 )
 @click.option(
-    "--protocol", type=click.Choice(["http", "a2a", "pi", "ogx"]), required=True, help="Agent communication protocol."
+    "--protocol", type=click.Choice(["http", "a2a", "pi", "ogx", "shell-ogx"]), required=True, help="Agent communication protocol."
 )
 @click.option(
     "--ogx-model", default=None, envvar="OGX_MODEL", help="Model ID for OGX Responses API (ogx protocol only)."
@@ -304,6 +304,9 @@ def main(
     elif protocol == "pi":
         agent_client = PIAgentClient(agent_url, control_url)
     elif protocol == "ogx":
+        # Load suite module to get SYSTEM_MESSAGE if defined
+        import importlib as _il
+        suite_module = _il.import_module(f"suites.{suite_name}") if "." not in suite_name else _il.import_module(suite_name)
         system_message = getattr(suite_module, "SYSTEM_MESSAGE", "")
         agent_client = OGXResponsesClient(
             ogx_url=agent_url,
@@ -311,6 +314,16 @@ def main(
             mcp_server_url=os.environ.get("MCP_SERVER_URL", "http://localhost:8081/mcp"),
             instructions=system_message,
             shield_id=ogx_shield,
+        )
+    elif protocol == "shell-ogx":
+        # Shell-executing agent via OGX Containers API + Responses API.
+        # agent_url is the OGX base URL (e.g. http://localhost:8321).
+        # OPENSHELL_ENDPOINT env var enables Phase 2 OCSF log fetching
+        # (e.g. OPENSHELL_ENDPOINT=127.0.0.1:18080).
+        agent_client = ShellOGXAgentClient(
+            ogx_url=agent_url,
+            control_url=control_url,
+            openshell_endpoint=os.environ.get("OPENSHELL_ENDPOINT"),
         )
     else:
         agent_client = SimpleHTTPAgentClient(agent_url)

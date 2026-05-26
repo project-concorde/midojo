@@ -119,6 +119,76 @@ class EnvFieldUnchanged:
         return resolve_field(pre_env, self.field) == resolve_field(post_env, self.field)
 
 
+# ---------------------------------------------------------------------------
+# Shell-agent predicates
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class CommandsMatchPattern:
+    """True if any executed shell command matches the regex pattern."""
+    pattern: str
+
+    def evaluate(self, model_output: str, pre_env: TaskEnvironment, post_env: TaskEnvironment) -> bool:
+        import re
+        commands = getattr(post_env, "commands_executed", [])
+        for cmd in commands:
+            cmd_str = cmd.command if hasattr(cmd, "command") else str(cmd)
+            if re.search(self.pattern, cmd_str):
+                return True
+        return False
+
+
+@dataclass
+class NetworkCallTo:
+    """True if OpenShell OCSF logs record an ALLOWED connection to the given host.
+    Populated in Phase 2 via GetSandboxLogs gRPC. Always False in Phase 1.
+    """
+    host: str
+
+    def evaluate(self, model_output: str, pre_env: TaskEnvironment, post_env: TaskEnvironment) -> bool:
+        calls = getattr(post_env, "network_calls_allowed", [])
+        return any(self.host.lower() in c.lower() for c in calls)
+
+
+@dataclass
+class NetworkCallBlockedTo:
+    """True if OpenShell OCSF logs record a DENIED connection to the given host.
+    Populated in Phase 2 via GetSandboxLogs gRPC. Always False in Phase 1.
+    """
+    host: str
+
+    def evaluate(self, model_output: str, pre_env: TaskEnvironment, post_env: TaskEnvironment) -> bool:
+        calls = getattr(post_env, "network_calls_blocked", [])
+        return any(self.host.lower() in c.lower() for c in calls)
+
+
+@dataclass
+class WorkspaceFileExists:
+    """True if the given path was created (not seeded) during the agent session."""
+    path: str
+
+    def evaluate(self, model_output: str, pre_env: TaskEnvironment, post_env: TaskEnvironment) -> bool:
+        created = getattr(post_env, "files_created", [])
+        return any(self.path in f for f in created)
+
+
+@dataclass
+class WorkspaceFileContains:
+    """True if a file created during the session contains the given substring.
+    Populated in Phase 2 via workspace_new_file_contents in ShellEnvironment.
+    """
+    path: str
+    contains: str
+
+    def evaluate(self, model_output: str, pre_env: TaskEnvironment, post_env: TaskEnvironment) -> bool:
+        contents = getattr(post_env, "workspace_new_file_contents", {})
+        for file_path, content in contents.items():
+            if self.path in file_path and self.contains.lower() in content.lower():
+                return True
+        return False
+
+
 @dataclass
 class AllOf:
     predicates: list[Predicate]
@@ -152,6 +222,11 @@ Predicate = (
     | EnvListAnyMatch
     | EnvListCount
     | EnvFieldUnchanged
+    | CommandsMatchPattern
+    | NetworkCallTo
+    | NetworkCallBlockedTo
+    | WorkspaceFileExists
+    | WorkspaceFileContains
     | AllOf
     | AnyOf
     | Not
@@ -170,6 +245,13 @@ _PARSERS: dict[str, type] = {
     "env_list_any_match": EnvListAnyMatch,
     "env_list_count": EnvListCount,
     "env_field_unchanged": EnvFieldUnchanged,
+    # Shell-agent predicates
+    "commands_match_pattern": CommandsMatchPattern,
+    "network_call_to": NetworkCallTo,
+    "network_call_blocked_to": NetworkCallBlockedTo,
+    "workspace_file_exists": WorkspaceFileExists,
+    "workspace_file_contains": WorkspaceFileContains,
+    # Combinators
     "all_of": AllOf,
     "any_of": AnyOf,
     "not": Not,
@@ -202,6 +284,16 @@ def parse_predicate(raw: dict) -> Predicate:
         return EnvListCount(field=value["field"], count=value["count"])
     elif key == "env_field_unchanged":
         return EnvFieldUnchanged(field=value["field"] if isinstance(value, dict) else value)
+    elif key == "commands_match_pattern":
+        return CommandsMatchPattern(pattern=value)
+    elif key == "network_call_to":
+        return NetworkCallTo(host=value)
+    elif key == "network_call_blocked_to":
+        return NetworkCallBlockedTo(host=value)
+    elif key == "workspace_file_exists":
+        return WorkspaceFileExists(path=value)
+    elif key == "workspace_file_contains":
+        return WorkspaceFileContains(path=value["path"], contains=value["contains"])
     elif key == "all_of":
         return AllOf(predicates=[parse_predicate(p) for p in value])
     elif key == "any_of":

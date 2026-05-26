@@ -137,6 +137,205 @@ class OGXResponsesClient(AgentClient):
         return response.output_text
 
 
+class ShellOGXAgentClient(AgentClient):
+    """Red-team agent client for shell-executing agents via OGX Responses API + OpenShell.
+
+    Lifecycle per evaluation:
+      1. Read injected workspace_file_contents from control plane (/current/environment)
+      2. Snapshot current OpenShell sandboxes (for sandbox ID correlation)
+      3. Create container via OGX Containers API
+      4. Seed /workspace files from injected contents
+      5. Mark workspace baseline (timestamp file) for diff
+      6. Record evaluation start time (for OCSF log window)
+      7. Call OGX Responses API with container_reference
+      8. Extract shell_call items → record as function calls to control plane
+      9. Workspace diff → read contents of newly created files
+      10. Fetch OCSF events from OpenShell (if openshell_endpoint provided)
+      11. Update ShellEnvironment on control plane
+      12. Delete container
+
+    Sandbox ID correlation (Phase 2):
+      OGX's Containers API doesn't expose the underlying OpenShell sandbox ID.
+      We diff SandboxClient.list() before/after container creation to find the new
+      sandbox and get its ID for GetSandboxLogs.
+      HACK: breaks under concurrent evaluations. Proper fix: contribute sandbox_id
+      to OGX fork's Container model response (_row_to_container in containers.py).
+    """
+
+    def __init__(
+        self,
+        ogx_url: str,
+        control_url: str,
+        *,
+        openshell_endpoint: str | None = None,
+        timeout: float = 300.0,
+    ) -> None:
+        self.ogx_url = ogx_url.rstrip("/")
+        self.control_url = control_url.rstrip("/")
+        self.openshell_endpoint = openshell_endpoint
+        self.timeout = timeout
+
+    async def send_task(self, prompt: str) -> str:
+        import asyncio
+        import time
+
+        from openai import AsyncOpenAI
+
+        from midojo.openshell_logs import fetch_ocsf_events, list_sandbox_refs
+        from midojo.shell_environment import CommandRecord, ShellEnvironment
+
+        http = httpx.AsyncClient(base_url=self.ogx_url, timeout=self.timeout)
+        cp = httpx.AsyncClient(base_url=self.control_url, timeout=30.0)
+
+        try:
+            # 1. Read injected environment from control plane
+            env_resp = await cp.get("/current/environment")
+            env_resp.raise_for_status()
+            env = ShellEnvironment.model_validate(env_resp.json())
+            workspace_files = env.workspace_file_contents
+
+            # 2. Snapshot sandbox IDs before container creation (for OCSF correlation)
+            endpoint = self.openshell_endpoint or os.environ.get("OPENSHELL_ENDPOINT")
+            sandboxes_before: dict = {}
+            if endpoint:
+                sandboxes_before = await asyncio.to_thread(list_sandbox_refs, endpoint)
+
+            # 3. Create container
+            c_resp = await http.post("/v1/containers", json={"name": "midojo-redteam", "memory_limit": "1g"})
+            c_resp.raise_for_status()
+            container_id = c_resp.json()["id"]
+
+            try:
+                # 4. Seed workspace files
+                await http.post(f"/v1/containers/{container_id}/exec", json={
+                    "container_id": container_id,
+                    "commands": ["mkdir -p /workspace"],
+                })
+                for path, content in workspace_files.items():
+                    safe = content.replace("'", "'\\''")
+                    await http.post(f"/v1/containers/{container_id}/exec", json={
+                        "container_id": container_id,
+                        "commands": [f"printf '%s' '{safe}' > /workspace/{path}"],
+                    })
+
+                # 5. Baseline marker for workspace diff
+                await http.post(f"/v1/containers/{container_id}/exec", json={
+                    "container_id": container_id,
+                    "commands": ["touch /tmp/.midojo_baseline"],
+                })
+
+                # 6. Find new sandbox ID (diff after seeding so sandbox is ready)
+                sandbox_id: str | None = None
+                if endpoint:
+                    sandboxes_after = await asyncio.to_thread(list_sandbox_refs, endpoint)
+                    new_ids = set(sandboxes_after) - set(sandboxes_before)
+                    if new_ids:
+                        sandbox_id = new_ids.pop()
+
+                # Record start time for OCSF log window
+                start_ms = int(time.time() * 1000)
+
+                # 7. Call Responses API with container_reference
+                openai_client = AsyncOpenAI(
+                    base_url=self.ogx_url + "/v1",
+                    api_key=os.environ.get("OPENAI_API_KEY", "ollama"),
+                )
+                response = await openai_client.responses.create(
+                    model=os.environ.get("OGX_MODEL", "qwen3.5:2b"),
+                    tools=[{
+                        "type": "shell",
+                        "environment": {
+                            "type": "container_reference",
+                            "container_id": container_id,
+                        },
+                    }],
+                    input=prompt,
+                )
+
+                # 8. Extract shell_call items and record to control plane
+                commands_executed: list[CommandRecord] = []
+                output_items = list(response.output)
+                for i, item in enumerate(output_items):
+                    if item.type == "shell_call":
+                        exit_code = 0
+                        stdout = ""
+                        if i + 1 < len(output_items) and output_items[i + 1].type == "shell_call_output":
+                            out = output_items[i + 1]
+                            exit_code = getattr(out, "exit_code", 0) or 0
+                            stdout = getattr(out, "stdout", "") or ""
+                        cmd_record = CommandRecord(
+                            command=item.action,
+                            exit_code=exit_code,
+                            stdout=stdout,
+                        )
+                        commands_executed.append(cmd_record)
+                        await cp.post("/current/function-calls", json={
+                            "function": "shell",
+                            "args": {"command": item.action},
+                            "result": stdout,
+                            "error": None if exit_code == 0 else f"exit_code={exit_code}",
+                        })
+
+                # 9. Workspace diff — new files + their contents
+                diff_resp = await http.post(f"/v1/containers/{container_id}/exec", json={
+                    "container_id": container_id,
+                    "commands": ["find /workspace -type f -newer /tmp/.midojo_baseline 2>/dev/null"],
+                })
+                seeded_paths = {f"/workspace/{p}" for p in workspace_files}
+                new_files: list[str] = []
+                modified_files: list[str] = []
+                new_file_contents: dict[str, str] = {}
+
+                for line in diff_resp.json().get("stdout", "").splitlines():
+                    fpath = line.strip()
+                    if not fpath:
+                        continue
+                    if fpath in seeded_paths:
+                        modified_files.append(fpath)
+                    else:
+                        new_files.append(fpath)
+                        # Read contents of newly created files (for workspace_file_contains predicate)
+                        try:
+                            read_resp = await http.post(f"/v1/containers/{container_id}/exec", json={
+                                "container_id": container_id,
+                                "commands": [f"cat '{fpath}' 2>/dev/null"],
+                            })
+                            if read_resp.json().get("exit_code", 1) == 0:
+                                new_file_contents[fpath] = read_resp.json().get("stdout", "")
+                        except Exception:
+                            pass
+
+                # 10. Fetch OCSF events from OpenShell (if endpoint available)
+                network_allowed: list[str] = []
+                network_blocked: list[str] = []
+                if endpoint and sandbox_id:
+                    network_allowed, network_blocked = await asyncio.to_thread(
+                        fetch_ocsf_events, sandbox_id, start_ms, endpoint
+                    )
+
+                # 11. Update environment on control plane
+                env.commands_executed = commands_executed
+                env.files_created = new_files
+                env.files_modified = modified_files
+                env.workspace_new_file_contents = new_file_contents
+                env.network_calls_allowed = network_allowed
+                env.network_calls_blocked = network_blocked
+                await cp.put("/current/environment", json=env.model_dump())
+
+            finally:
+                # Always delete container
+                try:
+                    await http.delete(f"/v1/containers/{container_id}")
+                except Exception:
+                    pass
+
+            return response.output_text or ""
+
+        finally:
+            await http.aclose()
+            await cp.aclose()
+
+
 class PIAgentClient(AgentClient):
     """Launches a PI coding agent as a subprocess for each task.
 

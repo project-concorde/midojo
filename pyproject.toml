@@ -29,6 +29,12 @@ weather = [
     "pypdf",
     "openai>=1.0",
 ]
+shell = [
+    # OGX fork (PR #5853 branch) installed separately — not on PyPI.
+    # Install from local clone: pip install -e /path/to/llama-stack-fork
+    "openai>=1.80.0",   # Responses API client with shell tool support
+    "grpcio>=1.60",     # For Phase 2 direct OpenShell gRPC calls
+]
 dev = [
     "pytest>=8.0.2",
     "pytest-asyncio>=0.24",
@@ -46,6 +52,8 @@ weather-a2a-agent = "suites.weather.a2a_agent.agent:main"
 minibank-fake-mcp-serve = "suites.minibank.a2a_agent.fake_mcp:main"
 minibank-real-mcp-serve = "suites.minibank.a2a_agent.real_mcp:main"
 minibank-a2a-agent = "suites.minibank.a2a_agent.agent:main"
+shell-redteam-validate = "suites.shell_financial_report.validate:main"
+shell-redteam-run = "midojo.orchestrator:main"
 
 [build-system]
 requires = ["hatchling"]
