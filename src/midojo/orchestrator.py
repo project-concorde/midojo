@@ -275,7 +275,7 @@ async def run_benchmark(
 @click.command()
 @click.option("--control-url", default="http://localhost:8080", help="URL of the benchmark MCP server control plane.")
 @click.option("--agent-url", required=True, help="URL of the agent to test.")
-@click.option("--suite", "suite_name", default="weather", help="Benchmark suite name.")
+@click.option("--suite", "suite_name", required=True, help="Benchmark suite name.")
 @click.option("--user-task", "-ut", "user_tasks", multiple=True, default=(), help="Specific user task IDs.")
 @click.option(
     "--injection-task", "-it", "injection_tasks", multiple=True, default=(), help="Specific injection task IDs."
