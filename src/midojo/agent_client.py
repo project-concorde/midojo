@@ -253,35 +253,51 @@ class ShellOGXAgentClient(AgentClient):
                 )
 
                 # 8. Extract shell_call items and record to control plane
+                # shell_call.action = the command; shell_call_output = {exit_code, stdout, stderr}
                 commands_executed: list[CommandRecord] = []
                 output_items = list(response.output)
                 for i, item in enumerate(output_items):
                     if item.type == "shell_call":
                         exit_code = 0
                         stdout = ""
+                        stderr = ""
                         if i + 1 < len(output_items) and output_items[i + 1].type == "shell_call_output":
                             out = output_items[i + 1]
                             exit_code = getattr(out, "exit_code", 0) or 0
                             stdout = getattr(out, "stdout", "") or ""
+                            stderr = getattr(out, "stderr", "") or ""
                         cmd_record = CommandRecord(
                             command=item.action,
                             exit_code=exit_code,
                             stdout=stdout,
+                            stderr=stderr,
                         )
                         commands_executed.append(cmd_record)
                         await cp.post("/current/function-calls", json={
                             "function": "shell",
                             "args": {"command": item.action},
                             "result": stdout,
-                            "error": None if exit_code == 0 else f"exit_code={exit_code}",
+                            "error": stderr if stderr else (None if exit_code == 0 else f"exit_code={exit_code}"),
                         })
 
-                # 9. Workspace diff — new files + their contents
+                # 9. Workspace diff — snapshot all files before/after, detect new/modified/deleted
+                # "Newer than baseline" catches created + modified
                 diff_resp = await http.post(f"/v1/containers/{container_id}/exec", json={
                     "container_id": container_id,
                     "commands": ["find /workspace -type f -newer /tmp/.midojo_baseline 2>/dev/null"],
                 })
+                # All files currently in workspace (to detect deletions)
+                all_resp = await http.post(f"/v1/containers/{container_id}/exec", json={
+                    "container_id": container_id,
+                    "commands": ["find /workspace -type f 2>/dev/null"],
+                })
+
                 seeded_paths = {f"/workspace/{p}" for p in workspace_files}
+                current_paths = {
+                    line.strip()
+                    for line in all_resp.json().get("stdout", "").splitlines()
+                    if line.strip()
+                }
                 new_files: list[str] = []
                 modified_files: list[str] = []
                 new_file_contents: dict[str, str] = {}
@@ -294,7 +310,6 @@ class ShellOGXAgentClient(AgentClient):
                         modified_files.append(fpath)
                     else:
                         new_files.append(fpath)
-                        # Read contents of newly created files (for workspace_file_contains predicate)
                         try:
                             read_resp = await http.post(f"/v1/containers/{container_id}/exec", json={
                                 "container_id": container_id,
@@ -305,11 +320,15 @@ class ShellOGXAgentClient(AgentClient):
                         except Exception:
                             pass
 
+                # Deleted = seeded files no longer in workspace
+                deleted_files = [p for p in seeded_paths if p not in current_paths]
+
                 # 10. Fetch OCSF events from OpenShell (if endpoint available)
-                network_allowed: list[str] = []
-                network_blocked: list[str] = []
+                # Returns OCSFEvents with network, HTTP, process, and finding events
+                ocsf = None
                 if endpoint and sandbox_id:
-                    network_allowed, network_blocked = await asyncio.to_thread(
+                    from midojo.openshell_logs import OCSFEvents
+                    ocsf = await asyncio.to_thread(
                         fetch_ocsf_events, sandbox_id, start_ms, endpoint
                     )
 
@@ -317,9 +336,15 @@ class ShellOGXAgentClient(AgentClient):
                 env.commands_executed = commands_executed
                 env.files_created = new_files
                 env.files_modified = modified_files
+                env.files_deleted = deleted_files
                 env.workspace_new_file_contents = new_file_contents
-                env.network_calls_allowed = network_allowed
-                env.network_calls_blocked = network_blocked
+                if ocsf is not None:
+                    env.network_calls_allowed = ocsf.network_allowed_endpoints
+                    env.network_calls_blocked = ocsf.network_blocked_endpoints
+                    env.http_calls_allowed = [f"{e.method} {e.url}" for e in ocsf.http_allowed]
+                    env.http_calls_blocked = [f"{e.method} {e.url}" for e in ocsf.http_blocked]
+                    env.processes_started = [p.binary for p in ocsf.processes_launched]
+                    env.security_findings = [f.title for f in ocsf.findings]
                 await cp.put("/current/environment", json=env.model_dump())
 
             finally:
