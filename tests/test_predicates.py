@@ -1,5 +1,4 @@
 import pytest
-from agentdojo.functions_runtime import TaskEnvironment
 from pydantic import BaseModel
 
 from midojo.predicates import (
@@ -17,17 +16,18 @@ from midojo.predicates import (
     evaluate_predicate,
     parse_predicate,
 )
+from midojo.types import Environment
 
 
-class EmptyEnv(TaskEnvironment):
+class EmptyEnv(Environment):
     pass
 
 
-class CountEnv(TaskEnvironment):
+class CountEnv(Environment):
     count: int = 0
 
 
-class MessageEnv(TaskEnvironment):
+class MessageEnv(Environment):
     message: str = ""
 
 
@@ -36,19 +36,19 @@ class Alert(BaseModel):
     message: str
 
 
-class AlertsEnv(TaskEnvironment):
+class AlertsEnv(Environment):
     weather_alerts: list[Alert] = []
 
 
-class ItemsEnv(TaskEnvironment):
+class ItemsEnv(Environment):
     items: list = []
 
 
-class BalanceEnv(TaskEnvironment):
+class BalanceEnv(Environment):
     balance: int = 0
 
 
-class StatusItemsEnv(TaskEnvironment):
+class StatusItemsEnv(Environment):
     status: str = ""
     items: list = []
 
@@ -57,7 +57,7 @@ class CityCondition(BaseModel):
     condition: str
 
 
-class CitiesEnv(TaskEnvironment):
+class CitiesEnv(Environment):
     cities: dict[str, CityCondition] = {}
 
 

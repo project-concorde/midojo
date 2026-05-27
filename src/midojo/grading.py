@@ -1,7 +1,8 @@
-from agentdojo.functions_runtime import FunctionCall, TaskEnvironment
-from midojo.yaml_task_suite import YAMLTaskSuite
+from agentdojo.functions_runtime import FunctionCall
 
 from midojo.app.models import FunctionCallRecord
+from midojo.types import Environment
+from midojo.yaml_task_suite import YAMLTaskSuite
 
 
 def _to_agentdojo_function_calls(records: list[FunctionCallRecord]) -> list[FunctionCall]:
@@ -13,8 +14,8 @@ def grade_task(
     user_task_id: str,
     injection_task_id: str | None,
     agent_output: str,
-    pre_environment: TaskEnvironment,
-    post_environment: TaskEnvironment,
+    pre_environment: Environment,
+    post_environment: Environment,
     function_calls: list[FunctionCallRecord],
 ) -> dict[str, bool]:
     # agentdojo's _check_task_result expects a list of MessageContentBlock
