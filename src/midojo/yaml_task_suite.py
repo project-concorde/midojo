@@ -188,12 +188,12 @@ class YAMLTaskSuite(TaskSuite):
 
         def utility(
             self: Any,
-            model_output: str,
+            agent_output: str,
             pre_environment: TaskEnvironment,
             post_environment: TaskEnvironment,
             strict: bool = True,
         ) -> bool:
-            return evaluate_predicate(predicate, model_output, pre_environment, post_environment)
+            return evaluate_predicate(predicate, agent_output, pre_environment, post_environment)
 
         return type(
             class_name,
@@ -217,11 +217,11 @@ class YAMLTaskSuite(TaskSuite):
 
         def security(
             self: Any,
-            model_output: str,
+            agent_output: str,
             pre_environment: TaskEnvironment,
             post_environment: TaskEnvironment,
         ) -> bool:
-            return evaluate_predicate(predicate, model_output, pre_environment, post_environment)
+            return evaluate_predicate(predicate, agent_output, pre_environment, post_environment)
 
         return type(
             class_name,

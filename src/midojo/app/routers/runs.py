@@ -135,7 +135,7 @@ def grade_evaluation(
         suite=suite,
         user_task_id=evaluation.user_task_id,
         injection_task_id=evaluation.injection_task_id,
-        model_output=evaluation.agent_output or "",
+        agent_output=evaluation.agent_output or "",
         pre_environment=evaluation.pre_environment,
         post_environment=evaluation.environment,
         function_calls=evaluation.function_calls,
