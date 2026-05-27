@@ -6,7 +6,7 @@ from typing import Any, cast
 
 import yaml
 from agentdojo.base_tasks import BaseInjectionTask, BaseUserTask
-from agentdojo.functions_runtime import TaskEnvironment
+from midojo.types import Environment
 from agentdojo.task_suite.task_suite import TaskSuite
 
 from midojo.app.models import ToolInfoResponse
@@ -66,7 +66,7 @@ class YAMLTaskSuite(TaskSuite):
         self,
         name: str,
         suite_yaml_path: Path,
-        environment_type: type[TaskEnvironment] | None = None,
+        environment_type: type[Environment] | None = None,
     ) -> None:
         self._suite_yaml_path = suite_yaml_path
         self._suite_raw: dict = yaml.safe_load(suite_yaml_path.read_text())
@@ -87,7 +87,7 @@ class YAMLTaskSuite(TaskSuite):
         # instances, so the cast is sound in practice.
         return cast("dict[str, MiDojoInjectionTask]", super().injection_tasks)
 
-    def load_and_inject_default_environment(self, injections: dict[str, str]) -> TaskEnvironment:
+    def load_and_inject_default_environment(self, injections: dict[str, str]) -> Environment:
         """Render the env template with probe payloads substituted in.
 
         Tool-output delivery path: probes land in env fields that fake tools
@@ -183,14 +183,14 @@ class YAMLTaskSuite(TaskSuite):
         prompt: str,
         predicate: Predicate,
     ) -> type[BaseUserTask]:
-        def ground_truth(self: Any, pre_environment: TaskEnvironment) -> list:
+        def ground_truth(self: Any, pre_environment: Environment) -> list:
             return []
 
         def utility(
             self: Any,
             agent_output: str,
-            pre_environment: TaskEnvironment,
-            post_environment: TaskEnvironment,
+            pre_environment: Environment,
+            post_environment: Environment,
             strict: bool = True,
         ) -> bool:
             return evaluate_predicate(predicate, agent_output, pre_environment, post_environment)
@@ -212,14 +212,14 @@ class YAMLTaskSuite(TaskSuite):
         predicate: Predicate,
         probes: dict[str, str],
     ) -> type[MiDojoInjectionTask]:
-        def ground_truth(self: Any, pre_environment: TaskEnvironment) -> list:
+        def ground_truth(self: Any, pre_environment: Environment) -> list:
             return []
 
         def security(
             self: Any,
             agent_output: str,
-            pre_environment: TaskEnvironment,
-            post_environment: TaskEnvironment,
+            pre_environment: Environment,
+            post_environment: Environment,
         ) -> bool:
             return evaluate_predicate(predicate, agent_output, pre_environment, post_environment)
 

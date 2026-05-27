@@ -1,12 +1,11 @@
-from agentdojo.functions_runtime import TaskEnvironment
-
 from midojo.env_inference import infer_environment_type
+from midojo.types import Environment
 
 
 def test_scalar_fields():
     env_data = {"name": "test", "count": 5, "ratio": 3.14, "active": True}
     EnvType = infer_environment_type("demo", env_data)
-    assert issubclass(EnvType, TaskEnvironment)
+    assert issubclass(EnvType, Environment)
 
     instance = EnvType.model_validate(env_data)
     assert instance.name == "test"

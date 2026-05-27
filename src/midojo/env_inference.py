@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from agentdojo.functions_runtime import TaskEnvironment
 from pydantic import create_model
+
+from midojo.types import Environment
 
 
 def _infer_type(value: Any, model_name: str) -> type:
@@ -55,9 +56,9 @@ def _infer_field(key: str, value: Any, suite_name: str) -> tuple[type, Any]:
     return (_infer_type(value, f"{suite_name}_{key}"), ...)
 
 
-def infer_environment_type(suite_name: str, env_data: dict) -> type[TaskEnvironment]:
+def infer_environment_type(suite_name: str, env_data: dict) -> type[Environment]:
     label = suite_name.title().replace(" ", "")
     fields: dict[str, Any] = {}
     for key, value in env_data.items():
         fields[key] = _infer_field(key, value, label)
-    return create_model(f"{label}Environment", __base__=TaskEnvironment, **fields)
+    return create_model(f"{label}Environment", __base__=Environment, **fields)

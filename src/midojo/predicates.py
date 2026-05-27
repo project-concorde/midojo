@@ -16,10 +16,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from agentdojo.functions_runtime import TaskEnvironment
+from midojo.types import Environment
 
 
-def resolve_field(env: TaskEnvironment, path: str) -> Any:
+def resolve_field(env: Environment, path: str) -> Any:
     """Walk a dotted path into a Pydantic model."""
     current: Any = env
     for key in path.split("."):
@@ -39,7 +39,7 @@ def resolve_field(env: TaskEnvironment, path: str) -> Any:
 class OutputContains:
     value: str
 
-    def evaluate(self, agent_output: str, pre_env: TaskEnvironment, post_env: TaskEnvironment) -> bool:
+    def evaluate(self, agent_output: str, pre_env: Environment, post_env: Environment) -> bool:
         return self.value.lower() in agent_output.lower()
 
 
@@ -47,7 +47,7 @@ class OutputContains:
 class OutputContainsAll:
     values: list[str]
 
-    def evaluate(self, agent_output: str, pre_env: TaskEnvironment, post_env: TaskEnvironment) -> bool:
+    def evaluate(self, agent_output: str, pre_env: Environment, post_env: Environment) -> bool:
         lower = agent_output.lower()
         return all(v.lower() in lower for v in self.values)
 
@@ -56,7 +56,7 @@ class OutputContainsAll:
 class OutputContainsAny:
     values: list[str]
 
-    def evaluate(self, agent_output: str, pre_env: TaskEnvironment, post_env: TaskEnvironment) -> bool:
+    def evaluate(self, agent_output: str, pre_env: Environment, post_env: Environment) -> bool:
         lower = agent_output.lower()
         return any(v.lower() in lower for v in self.values)
 
@@ -66,7 +66,7 @@ class EnvFieldEquals:
     field: str
     value: Any
 
-    def evaluate(self, agent_output: str, pre_env: TaskEnvironment, post_env: TaskEnvironment) -> bool:
+    def evaluate(self, agent_output: str, pre_env: Environment, post_env: Environment) -> bool:
         return resolve_field(post_env, self.field) == self.value
 
 
@@ -75,7 +75,7 @@ class EnvFieldContains:
     field: str
     value: str
 
-    def evaluate(self, agent_output: str, pre_env: TaskEnvironment, post_env: TaskEnvironment) -> bool:
+    def evaluate(self, agent_output: str, pre_env: Environment, post_env: Environment) -> bool:
         field_val = resolve_field(post_env, self.field)
         return self.value.lower() in str(field_val).lower()
 
@@ -85,7 +85,7 @@ class EnvListAnyMatch:
     field: str
     match: dict[str, str]
 
-    def evaluate(self, agent_output: str, pre_env: TaskEnvironment, post_env: TaskEnvironment) -> bool:
+    def evaluate(self, agent_output: str, pre_env: Environment, post_env: Environment) -> bool:
         items = resolve_field(post_env, self.field)
         if not isinstance(items, list):
             return False
@@ -106,7 +106,7 @@ class EnvListCount:
     field: str
     count: int
 
-    def evaluate(self, agent_output: str, pre_env: TaskEnvironment, post_env: TaskEnvironment) -> bool:
+    def evaluate(self, agent_output: str, pre_env: Environment, post_env: Environment) -> bool:
         items = resolve_field(post_env, self.field)
         return isinstance(items, list) and len(items) == self.count
 
@@ -115,7 +115,7 @@ class EnvListCount:
 class EnvFieldUnchanged:
     field: str
 
-    def evaluate(self, agent_output: str, pre_env: TaskEnvironment, post_env: TaskEnvironment) -> bool:
+    def evaluate(self, agent_output: str, pre_env: Environment, post_env: Environment) -> bool:
         return resolve_field(pre_env, self.field) == resolve_field(post_env, self.field)
 
 
@@ -123,7 +123,7 @@ class EnvFieldUnchanged:
 class AllOf:
     predicates: list[Predicate]
 
-    def evaluate(self, agent_output: str, pre_env: TaskEnvironment, post_env: TaskEnvironment) -> bool:
+    def evaluate(self, agent_output: str, pre_env: Environment, post_env: Environment) -> bool:
         return all(p.evaluate(agent_output, pre_env, post_env) for p in self.predicates)
 
 
@@ -131,7 +131,7 @@ class AllOf:
 class AnyOf:
     predicates: list[Predicate]
 
-    def evaluate(self, agent_output: str, pre_env: TaskEnvironment, post_env: TaskEnvironment) -> bool:
+    def evaluate(self, agent_output: str, pre_env: Environment, post_env: Environment) -> bool:
         return any(p.evaluate(agent_output, pre_env, post_env) for p in self.predicates)
 
 
@@ -139,7 +139,7 @@ class AnyOf:
 class Not:
     predicate: Predicate
 
-    def evaluate(self, agent_output: str, pre_env: TaskEnvironment, post_env: TaskEnvironment) -> bool:
+    def evaluate(self, agent_output: str, pre_env: Environment, post_env: Environment) -> bool:
         return not self.predicate.evaluate(agent_output, pre_env, post_env)
 
 
@@ -213,6 +213,6 @@ def parse_predicate(raw: dict) -> Predicate:
 
 
 def evaluate_predicate(
-    predicate: Predicate, agent_output: str, pre_env: TaskEnvironment, post_env: TaskEnvironment
+    predicate: Predicate, agent_output: str, pre_env: Environment, post_env: Environment
 ) -> bool:
     return predicate.evaluate(agent_output, pre_env, post_env)

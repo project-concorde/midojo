@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from agentdojo.functions_runtime import TaskEnvironment
 from pydantic import BaseModel, ConfigDict, SerializeAsAny
 
+from midojo.types import Environment
 
 # --- Run / Evaluation request/response models ---
 
@@ -60,8 +60,8 @@ class FunctionCallRecord(CreateFunctionCallRecord):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     timestamp: str
-    pre_environment: SerializeAsAny[TaskEnvironment]
-    post_environment: SerializeAsAny[TaskEnvironment]
+    pre_environment: SerializeAsAny[Environment]
+    post_environment: SerializeAsAny[Environment]
 
 
 class EvaluationResponse(BaseModel):
@@ -83,7 +83,7 @@ class SuiteInfoResponse(BaseModel):
     user_tasks: list[str]
     injection_tasks: list[str]
     tools: list[str]
-    environment: TaskEnvironment
+    environment: Environment
 
 
 class TaskDetailResponse(BaseModel):
