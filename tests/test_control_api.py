@@ -73,6 +73,8 @@ def test_get_evaluation(client):
     assert data["id"] == eval_id
     assert data["user_task_id"] == "user_task_0"
     assert data["completed"] is False
+    assert "agent_input" in data
+    assert "weather" in data["agent_input"].lower()
 
 
 def test_complete_and_grade_utility_only(client):
@@ -82,7 +84,7 @@ def test_complete_and_grade_utility_only(client):
 
     resp = client.post(
         f"/runs/{run_id}/evaluations/{eval_id}/complete",
-        json={"model_output": "The weather in New York is 72°F and sunny."},
+        json={"agent_output": "The weather in New York is 72°F and sunny."},
     )
     assert resp.status_code == 200
 
@@ -158,7 +160,7 @@ def test_full_task_lifecycle(client):
 
     client.post(
         f"/runs/{run_id}/evaluations/{eval_id}/complete",
-        json={"model_output": "The weather in New York is 72°F and sunny."},
+        json={"agent_output": "The weather in New York is 72°F and sunny."},
     )
 
     resp = client.post(f"/runs/{run_id}/evaluations/{eval_id}/grade")
@@ -174,7 +176,7 @@ def test_run_aggregates_evaluations(client):
     eval_id = eval_data["id"]
     client.post(
         f"/runs/{run_id}/evaluations/{eval_id}/complete",
-        json={"model_output": "The weather in New York is 72°F and sunny."},
+        json={"agent_output": "The weather in New York is 72°F and sunny."},
     )
     client.post(f"/runs/{run_id}/evaluations/{eval_id}/grade")
 
