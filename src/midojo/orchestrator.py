@@ -17,7 +17,7 @@ from rich.table import Table
 from rich.text import Text
 
 from midojo.agent_client import A2AAgentClient, AgentClient, OGXResponsesClient, PIAgentClient, SimpleHTTPAgentClient
-from midojo.suites import get_suite
+from midojo.suites import get_suite, list_suites
 
 console = Console()
 
@@ -275,7 +275,7 @@ async def run_benchmark(
 @click.command()
 @click.option("--control-url", default="http://localhost:8080", help="URL of the benchmark MCP server control plane.")
 @click.option("--agent-url", required=True, help="URL of the agent to test.")
-@click.option("--suite", "suite_name", default="weather", help="Benchmark suite name.")
+@click.option("--suite", "suite_name", required=True, help=f"Benchmark suite name. Built-in: {', '.join(list_suites())}.")
 @click.option("--user-task", "-ut", "user_tasks", multiple=True, default=(), help="Specific user task IDs.")
 @click.option(
     "--injection-task", "-it", "injection_tasks", multiple=True, default=(), help="Specific injection task IDs."

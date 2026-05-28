@@ -6,6 +6,14 @@ from pathlib import Path
 from midojo.yaml_task_suite import YAMLTaskSuite
 
 
+def list_suites() -> list[str]:
+    """Return sorted names of built-in suites (directories under ``suites/`` with a ``suite.yaml``)."""
+    suites_dir = Path(importlib.import_module("suites").__file__).parent
+    return sorted(
+        p.parent.name for p in suites_dir.glob("*/suite.yaml")
+    )
+
+
 def get_suite(spec: str) -> YAMLTaskSuite:
     """Load a suite by name.
 
