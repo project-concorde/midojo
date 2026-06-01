@@ -1,13 +1,13 @@
 """Predicate registry, combinators, and the per-evaluation grading context.
 
 This module is the dispatch layer for suite grading predicates. Concrete
-predicate types are contributed by verification providers at startup via
+predicate types are contributed by verifiers at startup via
 register_predicate_parser(). The combinators (AllOf, AnyOf, Not) live
-here because they compose predicates rather than belonging to any provider.
+here because they compose predicates rather than belonging to any verifier.
 
-Every predicate reads from a single EvaluationContext, which carries the
+Every predicate reads from a single GradingContext, which carries the
 two axes of grading evidence: the environment snapshots (pre/post) plus the
-agent output, and handles to the verification providers bound to this
+agent output, and handles to the verifiers bound to this
 evaluation (RHACS runtime oracle, etc.).
 """
 
@@ -20,31 +20,31 @@ from typing import TYPE_CHECKING, Protocol, runtime_checkable
 from midojo.types import Environment
 
 if TYPE_CHECKING:
-    from midojo.verification import VerificationProvider
+    from midojo.verifier import Verifier
 
 
 @dataclass
-class EvaluationContext:
+class GradingContext:
     """Everything a predicate may consult when grading one evaluation."""
 
     agent_output: str
     pre_env: Environment
     post_env: Environment
-    providers: dict[str, VerificationProvider] = field(default_factory=dict)
+    verifiers: dict[str, Verifier] = field(default_factory=dict)
 
-    def provider(self, name: str) -> VerificationProvider:
-        """Look up a bound verification provider, or raise a clear error."""
-        if name not in self.providers:
+    def verifier(self, name: str) -> Verifier:
+        """Look up a bound verifier, or raise a clear error."""
+        if name not in self.verifiers:
             raise RuntimeError(
-                f"Predicate requires the '{name}' verification provider, "
+                f"Predicate requires the '{name}' verifier, "
                 f"which is not configured (check the relevant env vars)."
             )
-        return self.providers[name]
+        return self.verifiers[name]
 
 
 @runtime_checkable
 class Predicate(Protocol):
-    def evaluate(self, ctx: EvaluationContext) -> bool: ...
+    def evaluate(self, ctx: GradingContext) -> bool: ...
 
 
 # ---------------------------------------------------------------------------
@@ -56,7 +56,7 @@ class Predicate(Protocol):
 class AllOf:
     predicates: list[Predicate]
 
-    def evaluate(self, ctx: EvaluationContext) -> bool:
+    def evaluate(self, ctx: GradingContext) -> bool:
         return all(p.evaluate(ctx) for p in self.predicates)
 
 
@@ -64,7 +64,7 @@ class AllOf:
 class AnyOf:
     predicates: list[Predicate]
 
-    def evaluate(self, ctx: EvaluationContext) -> bool:
+    def evaluate(self, ctx: GradingContext) -> bool:
         return any(p.evaluate(ctx) for p in self.predicates)
 
 
@@ -72,7 +72,7 @@ class AnyOf:
 class Not:
     predicate: Predicate
 
-    def evaluate(self, ctx: EvaluationContext) -> bool:
+    def evaluate(self, ctx: GradingContext) -> bool:
         return not self.predicate.evaluate(ctx)
 
 
@@ -88,7 +88,7 @@ _PARSERS: dict[str, Callable[[object], Predicate]] = {
 
 
 def register_predicate_parser(key: str, parser: Callable[[object], Predicate]) -> None:
-    """Register a predicate parser contributed by a verification provider."""
+    """Register a predicate parser contributed by a verifier."""
     _PARSERS[key] = parser
 
 
@@ -110,18 +110,18 @@ def evaluate_predicate(
     agent_output: str,
     pre_env: Environment,
     post_env: Environment,
-    providers: dict[str, VerificationProvider] | None = None,
+    verifiers: dict[str, Verifier] | None = None,
 ) -> bool:
-    """Build an EvaluationContext from loose grading inputs and evaluate.
+    """Build a GradingContext from loose grading inputs and evaluate.
 
     This is the ergonomic boundary between callers (which hold the raw
-    output/env/provider values) and predicates (which consult a single
+    output/env/verifier values) and predicates (which consult a single
     context object).
     """
-    ctx = EvaluationContext(
+    ctx = GradingContext(
         agent_output=agent_output,
         pre_env=pre_env,
         post_env=post_env,
-        providers=providers or {},
+        verifiers=verifiers or {},
     )
     return predicate.evaluate(ctx)

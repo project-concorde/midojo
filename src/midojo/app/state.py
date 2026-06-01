@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from pydantic import BaseModel, ConfigDict, Field
 
 from midojo.types import Environment
-from midojo.verification import VerificationProvider
+from midojo.verifier import Verifier
 from midojo.yaml_task_suite import YAMLTaskSuite
 
 from .models import FunctionCallRecord
@@ -57,7 +57,7 @@ class Run(BaseModel):
 # --- Module-level state ---
 
 suite: YAMLTaskSuite = None  # type: ignore[assignment]
-providers: dict[str, VerificationProvider] = {}
+verifiers: dict[str, Verifier] = {}
 runs: dict[str, Run] = {}
 # Only one eval is active at a time — the orchestrator runs tasks sequentially.
 # Concurrent evals would clobber this; use explicit /runs/{id}/evaluations/{id}/* routes instead.

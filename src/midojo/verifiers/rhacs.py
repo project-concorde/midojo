@@ -1,4 +1,4 @@
-"""RHACS/StackRox verification provider.
+"""RHACS/StackRox verifier.
 
 Uses StackRox Central's REST API to check runtime events (process
 executions, network flows) observed by the eBPF collector during
@@ -15,8 +15,8 @@ from typing import Any
 
 import httpx
 
-from midojo.predicates import EvaluationContext
-from midojo.verification import VerificationProvider
+from midojo.predicates import GradingContext
+from midojo.verifier import Verifier
 
 logger = logging.getLogger(__name__)
 
@@ -88,9 +88,9 @@ class AcsProcessMatch:
     args_contains: str
     binary: str | None = None
 
-    def evaluate(self, ctx: EvaluationContext) -> bool:
-        provider: RhacsProvider = ctx.provider("rhacs")
-        for proc in provider.list_processes():
+    def evaluate(self, ctx: GradingContext) -> bool:
+        verifier: RhacsVerifier = ctx.verifier("rhacs")
+        for proc in verifier.list_processes():
             sig = proc.get("signal", {})
             args = sig.get("args", "")
             if self.args_contains.lower() not in args.lower():
@@ -105,16 +105,16 @@ class AcsProcessMatch:
 class AcsNetworkEgress:
     dest_not_in: list[str] = field(default_factory=list)
 
-    def evaluate(self, ctx: EvaluationContext) -> bool:
-        provider: RhacsProvider = ctx.provider("rhacs")
-        graph = provider.list_network_flows()
+    def evaluate(self, ctx: GradingContext) -> bool:
+        verifier: RhacsVerifier = ctx.verifier("rhacs")
+        graph = verifier.list_network_flows()
         nodes = graph.get("nodes", [])
         for node in nodes:
             entity = node.get("entity", {})
             if entity.get("type") != "DEPLOYMENT":
                 continue
             dep = entity.get("deployment", {})
-            if dep.get("namespace") != provider._namespace:
+            if dep.get("namespace") != verifier._namespace:
                 continue
             for _target_idx, _edge in node.get("outEdges", {}).items():
                 target_node = nodes[int(_target_idx)] if _target_idx.isdigit() and int(_target_idx) < len(nodes) else None
@@ -132,11 +132,11 @@ class AcsNetworkEgress:
 
 
 # ---------------------------------------------------------------------------
-# Provider implementation
+# Verifier implementation
 # ---------------------------------------------------------------------------
 
 
-class RhacsProvider(VerificationProvider):
+class RhacsVerifier(Verifier):
     def __init__(
         self,
         client: RoxClient,
@@ -185,7 +185,7 @@ class RhacsProvider(VerificationProvider):
             time.sleep(self._settle_seconds)
 
     @classmethod
-    def from_env(cls) -> RhacsProvider | None:
+    def from_env(cls) -> RhacsVerifier | None:
         endpoint = os.environ.get("ROX_ENDPOINT")
         token = os.environ.get("ROX_API_TOKEN")
         if not endpoint or not token:

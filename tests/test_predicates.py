@@ -8,7 +8,7 @@ from midojo.predicates import (
     evaluate_predicate,
     parse_predicate,
 )
-from midojo.providers.builtin import (
+from midojo.verifiers.builtin import (
     EnvFieldContains,
     EnvFieldEquals,
     EnvFieldUnchanged,

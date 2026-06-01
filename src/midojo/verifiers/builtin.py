@@ -1,4 +1,4 @@
-"""Built-in verification provider.
+"""Built-in verifier.
 
 Checks agent output and in-memory environment state. These are the
 predicates that ship with MiDojo — substring checks, field equality,
@@ -11,9 +11,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from midojo.predicates import EvaluationContext
+from midojo.predicates import GradingContext
 from midojo.types import Environment
-from midojo.verification import VerificationProvider
+from midojo.verifier import Verifier
 
 
 def resolve_field(env: Environment, path: str) -> Any:
@@ -36,7 +36,7 @@ def resolve_field(env: Environment, path: str) -> Any:
 class OutputContains:
     value: str
 
-    def evaluate(self, ctx: EvaluationContext) -> bool:
+    def evaluate(self, ctx: GradingContext) -> bool:
         return self.value.lower() in ctx.agent_output.lower()
 
 
@@ -44,7 +44,7 @@ class OutputContains:
 class OutputContainsAll:
     values: list[str]
 
-    def evaluate(self, ctx: EvaluationContext) -> bool:
+    def evaluate(self, ctx: GradingContext) -> bool:
         lower = ctx.agent_output.lower()
         return all(v.lower() in lower for v in self.values)
 
@@ -53,7 +53,7 @@ class OutputContainsAll:
 class OutputContainsAny:
     values: list[str]
 
-    def evaluate(self, ctx: EvaluationContext) -> bool:
+    def evaluate(self, ctx: GradingContext) -> bool:
         lower = ctx.agent_output.lower()
         return any(v.lower() in lower for v in self.values)
 
@@ -63,7 +63,7 @@ class EnvFieldEquals:
     field: str
     value: Any
 
-    def evaluate(self, ctx: EvaluationContext) -> bool:
+    def evaluate(self, ctx: GradingContext) -> bool:
         return resolve_field(ctx.post_env, self.field) == self.value
 
 
@@ -72,7 +72,7 @@ class EnvFieldContains:
     field: str
     value: str
 
-    def evaluate(self, ctx: EvaluationContext) -> bool:
+    def evaluate(self, ctx: GradingContext) -> bool:
         field_val = resolve_field(ctx.post_env, self.field)
         return self.value.lower() in str(field_val).lower()
 
@@ -82,7 +82,7 @@ class EnvListAnyMatch:
     field: str
     match: dict[str, str]
 
-    def evaluate(self, ctx: EvaluationContext) -> bool:
+    def evaluate(self, ctx: GradingContext) -> bool:
         items = resolve_field(ctx.post_env, self.field)
         if not isinstance(items, list):
             return False
@@ -103,7 +103,7 @@ class EnvListCount:
     field: str
     count: int
 
-    def evaluate(self, ctx: EvaluationContext) -> bool:
+    def evaluate(self, ctx: GradingContext) -> bool:
         items = resolve_field(ctx.post_env, self.field)
         return isinstance(items, list) and len(items) == self.count
 
@@ -112,16 +112,16 @@ class EnvListCount:
 class EnvFieldUnchanged:
     field: str
 
-    def evaluate(self, ctx: EvaluationContext) -> bool:
+    def evaluate(self, ctx: GradingContext) -> bool:
         return resolve_field(ctx.pre_env, self.field) == resolve_field(ctx.post_env, self.field)
 
 
 # ---------------------------------------------------------------------------
-# Provider
+# Verifier
 # ---------------------------------------------------------------------------
 
 
-class BuiltinPredicateProvider(VerificationProvider):
+class BuiltinVerifier(Verifier):
     @property
     def name(self) -> str:
         return "builtin"
@@ -143,5 +143,5 @@ class BuiltinPredicateProvider(VerificationProvider):
         pass
 
     @classmethod
-    def from_env(cls) -> BuiltinPredicateProvider:
+    def from_env(cls) -> BuiltinVerifier:
         return cls()

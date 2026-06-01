@@ -16,8 +16,8 @@ from rich.table import Table
 from rich.text import Text
 
 from midojo.agent_client import A2AAgentClient, AgentClient, OGXResponsesClient, PIAgentClient, SimpleHTTPAgentClient
-from midojo.providers import bootstrap_providers
 from midojo.suites import get_suite, list_suites
+from midojo.verifiers import bootstrap_verifiers
 from midojo.yaml_task_suite import YAMLTaskSuite
 
 console = Console()
@@ -309,7 +309,7 @@ def main(
     for module in modules_to_load:
         importlib.import_module(module)
 
-    bootstrap_providers()
+    bootstrap_verifiers()
     suite = get_suite(suite_name)
     agent_client: AgentClient
     if protocol == "a2a":

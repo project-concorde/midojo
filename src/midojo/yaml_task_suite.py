@@ -12,7 +12,7 @@ from midojo.attack_types import wrap_payload
 from midojo.env_inference import infer_environment_type
 from midojo.predicates import evaluate_predicate, parse_predicate
 from midojo.types import Environment
-from midojo.verification import VerificationProvider
+from midojo.verifier import Verifier
 
 
 @dataclass
@@ -26,9 +26,9 @@ class UserTask:
         agent_output: str,
         pre_env: Environment,
         post_env: Environment,
-        providers: dict[str, VerificationProvider] | None = None,
+        verifiers: dict[str, Verifier] | None = None,
     ) -> bool:
-        return evaluate_predicate(self.predicate, agent_output, pre_env, post_env, providers)
+        return evaluate_predicate(self.predicate, agent_output, pre_env, post_env, verifiers)
 
 
 @dataclass
@@ -43,11 +43,11 @@ class InjectionTask:
         agent_output: str,
         pre_env: Environment,
         post_env: Environment,
-        providers: dict[str, VerificationProvider] | None = None,
+        verifiers: dict[str, Verifier] | None = None,
     ) -> bool:
         if self.predicate is None:
             return False
-        return evaluate_predicate(self.predicate, agent_output, pre_env, post_env, providers)
+        return evaluate_predicate(self.predicate, agent_output, pre_env, post_env, verifiers)
 
 
 _PROBE_PLACEHOLDER_RE = re.compile(r"\{([A-Za-z_]\w*):([A-Za-z_]\w*)\}")
@@ -100,14 +100,14 @@ class YAMLTaskSuite:
         pre_environment: Environment,
         post_environment: Environment,
         function_calls: list[FunctionCallRecord],
-        providers: dict[str, VerificationProvider] | None = None,
+        verifiers: dict[str, Verifier] | None = None,
     ) -> dict[str, bool]:
         user_task = self.user_tasks[user_task_id]
-        utility = user_task.utility(agent_output, pre_environment, post_environment, providers)
+        utility = user_task.utility(agent_output, pre_environment, post_environment, verifiers)
 
         if injection_task_id is not None:
             injection_task = self.injection_tasks[injection_task_id]
-            security = injection_task.security(agent_output, pre_environment, post_environment, providers)
+            security = injection_task.security(agent_output, pre_environment, post_environment, verifiers)
         else:
             security = False
 

@@ -1,8 +1,8 @@
-"""VerificationProvider ABC and registry.
+"""Verifier ABC and registry.
 
-Verification providers extend MiDojo's grading system with external
+Verifiers extend MiDojo's grading system with external
 backends (RHACS runtime oracle, filesystem inspection, k8s audit, etc.).
-Each provider contributes predicate types for suite YAML and handles
+Each verifier contributes predicate types for suite YAML and handles
 its own lifecycle (setup, settle, teardown).
 """
 
@@ -16,11 +16,11 @@ if TYPE_CHECKING:
     from midojo.predicates import Predicate
 
 
-class VerificationProvider(abc.ABC):
+class Verifier(abc.ABC):
     @property
     @abc.abstractmethod
     def name(self) -> str:
-        """Provider identifier used as the key in grading context."""
+        """Verifier identifier used as the key in grading context."""
 
     @classmethod
     @abc.abstractmethod
@@ -29,7 +29,7 @@ class VerificationProvider(abc.ABC):
 
         Class-level so parsers can be registered even when the backend
         is not configured. Parsing succeeds; evaluation fails with a
-        clear error if the provider is missing at grading time.
+        clear error if the verifier is missing at grading time.
         """
 
     @abc.abstractmethod
@@ -45,5 +45,5 @@ class VerificationProvider(abc.ABC):
 
     @classmethod
     @abc.abstractmethod
-    def from_env(cls) -> VerificationProvider | None:
+    def from_env(cls) -> Verifier | None:
         """Create from environment variables. Returns None if not configured."""

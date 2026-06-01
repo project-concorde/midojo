@@ -133,12 +133,12 @@ def grade_evaluation(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Evaluation not completed. Call complete first."
         )
 
-    providers = state.providers
+    verifiers = state.verifiers
     completed_at = evaluation.completed_at or datetime.now(UTC).isoformat()
-    for provider in providers.values():
-        provider.setup(created_at=evaluation.created_at, completed_at=completed_at)
-    for provider in providers.values():
-        provider.settle()
+    for verifier in verifiers.values():
+        verifier.setup(created_at=evaluation.created_at, completed_at=completed_at)
+    for verifier in verifiers.values():
+        verifier.settle()
 
     result = suite.grade(
         user_task_id=evaluation.user_task_id,
@@ -147,7 +147,7 @@ def grade_evaluation(
         pre_environment=evaluation.pre_environment,
         post_environment=evaluation.environment,
         function_calls=evaluation.function_calls,
-        providers=providers,
+        verifiers=verifiers,
     )
     evaluation.utility = result["utility"]
     evaluation.security = result["security"]
