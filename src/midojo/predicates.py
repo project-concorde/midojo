@@ -10,11 +10,18 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
 
 from midojo.types import Environment
 
 GradingContext = dict[str, Any] | None
+
+
+@runtime_checkable
+class Predicate(Protocol):
+    def evaluate(
+        self, agent_output: str, pre_env: Environment, post_env: Environment, ctx: GradingContext = None
+    ) -> bool: ...
 
 
 # ---------------------------------------------------------------------------
@@ -24,7 +31,7 @@ GradingContext = dict[str, Any] | None
 
 @dataclass
 class AllOf:
-    predicates: list[Any]
+    predicates: list[Predicate]
 
     def evaluate(
         self, agent_output: str, pre_env: Environment, post_env: Environment, ctx: GradingContext = None
@@ -34,7 +41,7 @@ class AllOf:
 
 @dataclass
 class AnyOf:
-    predicates: list[Any]
+    predicates: list[Predicate]
 
     def evaluate(
         self, agent_output: str, pre_env: Environment, post_env: Environment, ctx: GradingContext = None
@@ -44,7 +51,7 @@ class AnyOf:
 
 @dataclass
 class Not:
-    predicate: Any
+    predicate: Predicate
 
     def evaluate(
         self, agent_output: str, pre_env: Environment, post_env: Environment, ctx: GradingContext = None
@@ -68,7 +75,7 @@ def register_predicate_parser(key: str, parser: Callable[[Any], Any]) -> None:
     _PARSERS[key] = parser
 
 
-def parse_predicate(raw: dict) -> Any:
+def parse_predicate(raw: dict) -> Predicate:
     if not isinstance(raw, dict) or len(raw) != 1:
         raise ValueError(f"Predicate must be a dict with exactly one key, got: {raw!r}")
 
@@ -82,7 +89,7 @@ def parse_predicate(raw: dict) -> Any:
 
 
 def evaluate_predicate(
-    predicate: Any,
+    predicate: Predicate,
     agent_output: str,
     pre_env: Environment,
     post_env: Environment,
