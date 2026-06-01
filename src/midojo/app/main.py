@@ -2,14 +2,19 @@ from __future__ import annotations
 
 from fastapi import FastAPI
 
+from midojo.verification import VerificationProvider
 from midojo.yaml_task_suite import YAMLTaskSuite
 
 from . import state
 from .routers import runs, suite, tasks, tools
 
 
-def create_app(suite_instance: YAMLTaskSuite) -> FastAPI:
+def create_app(
+    suite_instance: YAMLTaskSuite,
+    providers: list[VerificationProvider] | None = None,
+) -> FastAPI:
     state.suite = suite_instance
+    state.providers = providers or []
     state.runs = {}
     state.current_eval = None
 

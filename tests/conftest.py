@@ -3,9 +3,12 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from midojo.app import state
-from midojo.app.routers import runs, suite as suite_router, tasks, tools
+from midojo.app.routers import runs, tasks, tools
+from midojo.app.routers import suite as suite_router
+from midojo.providers import bootstrap_providers
 from midojo.suites import get_suite
 
+bootstrap_providers()
 task_suite = get_suite("weather")
 
 

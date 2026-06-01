@@ -32,7 +32,7 @@ class TestUserTasks:
 
 class TestInjectionTasks:
     def test_injection_tasks_loaded(self, suite):
-        assert len(suite.injection_tasks) == 4
+        assert len(suite.injection_tasks) == 5
 
     def test_task_id(self, suite):
         assert "injection_task_0" in suite.injection_tasks

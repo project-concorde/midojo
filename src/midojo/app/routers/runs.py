@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+import logging
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -8,16 +9,18 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from midojo.yaml_task_suite import YAMLTaskSuite
 
 from .. import state
+
+logger = logging.getLogger(__name__)
 from ..dependencies import get_current_evaluation, get_evaluation_by_id, get_run, get_suite
 from ..models import (
     CompleteRequest,
     CreateEvaluationRequest,
     CreateEvaluationResponse,
+    CreateFunctionCallRecord,
     CreateRunResponse,
     EvaluationResponse,
     EvaluationSummary,
     FunctionCallRecord,
-    CreateFunctionCallRecord,
     GradeResponse,
     RunResponse,
 )
@@ -116,6 +119,7 @@ def retrieve_evaluation(evaluation: Annotated[Evaluation, Depends(get_evaluation
 def complete_evaluation(req: CompleteRequest, evaluation: Annotated[Evaluation, Depends(get_evaluation_by_id)]):
     evaluation.agent_output = req.agent_output
     evaluation.completed = True
+    evaluation.completed_at = datetime.now(UTC).isoformat()
     return {"status": "completed"}
 
 
@@ -129,6 +133,15 @@ def grade_evaluation(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Evaluation not completed. Call complete first."
         )
 
+    providers = state.providers
+    completed_at = evaluation.completed_at or datetime.now(UTC).isoformat()
+    for provider in providers:
+        provider.setup(created_at=evaluation.created_at, completed_at=completed_at)
+    for provider in providers:
+        provider.settle()
+
+    grading_context = {p.name: p for p in providers} if providers else None
+
     result = suite.grade(
         user_task_id=evaluation.user_task_id,
         injection_task_id=evaluation.injection_task_id,
@@ -136,6 +149,7 @@ def grade_evaluation(
         pre_environment=evaluation.pre_environment,
         post_environment=evaluation.environment,
         function_calls=evaluation.function_calls,
+        grading_context=grading_context,
     )
     evaluation.utility = result["utility"]
     evaluation.security = result["security"]
@@ -207,7 +221,7 @@ def _append_function_call(req: CreateFunctionCallRecord, evaluation: Evaluation)
         pre_env = evaluation.pre_environment
     record = FunctionCallRecord(
         **req.model_dump(),
-        timestamp=datetime.now(timezone.utc).isoformat(),
+        timestamp=datetime.now(UTC).isoformat(),
         pre_environment=pre_env,
         post_environment=evaluation.environment.model_copy(deep=True),
     )

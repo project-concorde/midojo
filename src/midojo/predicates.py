@@ -1,22 +1,21 @@
 """Declarative predicate evaluator for suite grading.
 
 Predicates are parsed from YAML and cover common grading patterns: substring
-checks, field equality, list matching, and boolean combinators. Suites whose
-grading logic fits these patterns need no Python code.
+checks, field equality, list matching, and boolean combinators.
 
-Limitation: there is no "run arbitrary code" predicate. If a suite needs
-custom logic (e.g. regex matching, numeric ranges, fuzzy comparison), a new
-predicate type must be added here. A future `custom_function` predicate could
-allow suites to reference a Python callable for cases the built-in set can't
-express.
+Verification providers can register additional predicate types at startup
+via register_predicate_parser().
 """
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
 from midojo.types import Environment
+
+GradingContext = dict[str, Any] | None
 
 
 def resolve_field(env: Environment, path: str) -> Any:
@@ -39,7 +38,9 @@ def resolve_field(env: Environment, path: str) -> Any:
 class OutputContains:
     value: str
 
-    def evaluate(self, agent_output: str, pre_env: Environment, post_env: Environment) -> bool:
+    def evaluate(
+        self, agent_output: str, pre_env: Environment, post_env: Environment, ctx: GradingContext = None
+    ) -> bool:
         return self.value.lower() in agent_output.lower()
 
 
@@ -47,7 +48,9 @@ class OutputContains:
 class OutputContainsAll:
     values: list[str]
 
-    def evaluate(self, agent_output: str, pre_env: Environment, post_env: Environment) -> bool:
+    def evaluate(
+        self, agent_output: str, pre_env: Environment, post_env: Environment, ctx: GradingContext = None
+    ) -> bool:
         lower = agent_output.lower()
         return all(v.lower() in lower for v in self.values)
 
@@ -56,7 +59,9 @@ class OutputContainsAll:
 class OutputContainsAny:
     values: list[str]
 
-    def evaluate(self, agent_output: str, pre_env: Environment, post_env: Environment) -> bool:
+    def evaluate(
+        self, agent_output: str, pre_env: Environment, post_env: Environment, ctx: GradingContext = None
+    ) -> bool:
         lower = agent_output.lower()
         return any(v.lower() in lower for v in self.values)
 
@@ -66,7 +71,9 @@ class EnvFieldEquals:
     field: str
     value: Any
 
-    def evaluate(self, agent_output: str, pre_env: Environment, post_env: Environment) -> bool:
+    def evaluate(
+        self, agent_output: str, pre_env: Environment, post_env: Environment, ctx: GradingContext = None
+    ) -> bool:
         return resolve_field(post_env, self.field) == self.value
 
 
@@ -75,7 +82,9 @@ class EnvFieldContains:
     field: str
     value: str
 
-    def evaluate(self, agent_output: str, pre_env: Environment, post_env: Environment) -> bool:
+    def evaluate(
+        self, agent_output: str, pre_env: Environment, post_env: Environment, ctx: GradingContext = None
+    ) -> bool:
         field_val = resolve_field(post_env, self.field)
         return self.value.lower() in str(field_val).lower()
 
@@ -85,7 +94,9 @@ class EnvListAnyMatch:
     field: str
     match: dict[str, str]
 
-    def evaluate(self, agent_output: str, pre_env: Environment, post_env: Environment) -> bool:
+    def evaluate(
+        self, agent_output: str, pre_env: Environment, post_env: Environment, ctx: GradingContext = None
+    ) -> bool:
         items = resolve_field(post_env, self.field)
         if not isinstance(items, list):
             return False
@@ -94,9 +105,7 @@ class EnvListAnyMatch:
                 if all(k in item and self.match[k].lower() in str(item[k]).lower() for k in self.match):
                     return True
             else:
-                if all(
-                    hasattr(item, k) and self.match[k].lower() in str(getattr(item, k)).lower() for k in self.match
-                ):
+                if all(hasattr(item, k) and self.match[k].lower() in str(getattr(item, k)).lower() for k in self.match):
                     return True
         return False
 
@@ -106,7 +115,9 @@ class EnvListCount:
     field: str
     count: int
 
-    def evaluate(self, agent_output: str, pre_env: Environment, post_env: Environment) -> bool:
+    def evaluate(
+        self, agent_output: str, pre_env: Environment, post_env: Environment, ctx: GradingContext = None
+    ) -> bool:
         items = resolve_field(post_env, self.field)
         return isinstance(items, list) and len(items) == self.count
 
@@ -115,7 +126,9 @@ class EnvListCount:
 class EnvFieldUnchanged:
     field: str
 
-    def evaluate(self, agent_output: str, pre_env: Environment, post_env: Environment) -> bool:
+    def evaluate(
+        self, agent_output: str, pre_env: Environment, post_env: Environment, ctx: GradingContext = None
+    ) -> bool:
         return resolve_field(pre_env, self.field) == resolve_field(post_env, self.field)
 
 
@@ -123,24 +136,30 @@ class EnvFieldUnchanged:
 class AllOf:
     predicates: list[Predicate]
 
-    def evaluate(self, agent_output: str, pre_env: Environment, post_env: Environment) -> bool:
-        return all(p.evaluate(agent_output, pre_env, post_env) for p in self.predicates)
+    def evaluate(
+        self, agent_output: str, pre_env: Environment, post_env: Environment, ctx: GradingContext = None
+    ) -> bool:
+        return all(p.evaluate(agent_output, pre_env, post_env, ctx) for p in self.predicates)
 
 
 @dataclass
 class AnyOf:
     predicates: list[Predicate]
 
-    def evaluate(self, agent_output: str, pre_env: Environment, post_env: Environment) -> bool:
-        return any(p.evaluate(agent_output, pre_env, post_env) for p in self.predicates)
+    def evaluate(
+        self, agent_output: str, pre_env: Environment, post_env: Environment, ctx: GradingContext = None
+    ) -> bool:
+        return any(p.evaluate(agent_output, pre_env, post_env, ctx) for p in self.predicates)
 
 
 @dataclass
 class Not:
     predicate: Predicate
 
-    def evaluate(self, agent_output: str, pre_env: Environment, post_env: Environment) -> bool:
-        return not self.predicate.evaluate(agent_output, pre_env, post_env)
+    def evaluate(
+        self, agent_output: str, pre_env: Environment, post_env: Environment, ctx: GradingContext = None
+    ) -> bool:
+        return not self.predicate.evaluate(agent_output, pre_env, post_env, ctx)
 
 
 Predicate = (
@@ -161,19 +180,24 @@ Predicate = (
 # Parser: raw YAML dict -> Predicate
 # ---------------------------------------------------------------------------
 
-_PARSERS: dict[str, type] = {
-    "output_contains": OutputContains,
-    "output_contains_all": OutputContainsAll,
-    "output_contains_any": OutputContainsAny,
-    "env_field_equals": EnvFieldEquals,
-    "env_field_contains": EnvFieldContains,
-    "env_list_any_match": EnvListAnyMatch,
-    "env_list_count": EnvListCount,
-    "env_field_unchanged": EnvFieldUnchanged,
-    "all_of": AllOf,
-    "any_of": AnyOf,
-    "not": Not,
+_PARSERS: dict[str, Callable[[Any], Predicate]] = {
+    "output_contains": lambda v: OutputContains(value=v),
+    "output_contains_all": lambda v: OutputContainsAll(values=v),
+    "output_contains_any": lambda v: OutputContainsAny(values=v),
+    "env_field_equals": lambda v: EnvFieldEquals(field=v["field"], value=v["value"]),
+    "env_field_contains": lambda v: EnvFieldContains(field=v["field"], value=v["value"]),
+    "env_list_any_match": lambda v: EnvListAnyMatch(field=v["field"], match=v["match"]),
+    "env_list_count": lambda v: EnvListCount(field=v["field"], count=v["count"]),
+    "env_field_unchanged": lambda v: EnvFieldUnchanged(field=v["field"] if isinstance(v, dict) else v),
+    "all_of": lambda v: AllOf(predicates=[parse_predicate(p) for p in v]),
+    "any_of": lambda v: AnyOf(predicates=[parse_predicate(p) for p in v]),
+    "not": lambda v: Not(predicate=parse_predicate(v)),
 }
+
+
+def register_predicate_parser(key: str, parser: Callable[[Any], Predicate]) -> None:
+    """Register a predicate parser contributed by a verification provider."""
+    _PARSERS[key] = parser
 
 
 def parse_predicate(raw: dict) -> Predicate:
@@ -186,33 +210,14 @@ def parse_predicate(raw: dict) -> Predicate:
     if key not in _PARSERS:
         raise ValueError(f"Unknown predicate type: {key!r}. Must be one of: {sorted(_PARSERS)}")
 
-    if key == "output_contains":
-        return OutputContains(value=value)
-    elif key == "output_contains_all":
-        return OutputContainsAll(values=value)
-    elif key == "output_contains_any":
-        return OutputContainsAny(values=value)
-    elif key == "env_field_equals":
-        return EnvFieldEquals(field=value["field"], value=value["value"])
-    elif key == "env_field_contains":
-        return EnvFieldContains(field=value["field"], value=value["value"])
-    elif key == "env_list_any_match":
-        return EnvListAnyMatch(field=value["field"], match=value["match"])
-    elif key == "env_list_count":
-        return EnvListCount(field=value["field"], count=value["count"])
-    elif key == "env_field_unchanged":
-        return EnvFieldUnchanged(field=value["field"] if isinstance(value, dict) else value)
-    elif key == "all_of":
-        return AllOf(predicates=[parse_predicate(p) for p in value])
-    elif key == "any_of":
-        return AnyOf(predicates=[parse_predicate(p) for p in value])
-    elif key == "not":
-        return Not(predicate=parse_predicate(value))
-
-    raise ValueError(f"Unhandled predicate type: {key!r}")
+    return _PARSERS[key](value)
 
 
 def evaluate_predicate(
-    predicate: Predicate, agent_output: str, pre_env: Environment, post_env: Environment
+    predicate: Predicate,
+    agent_output: str,
+    pre_env: Environment,
+    post_env: Environment,
+    ctx: GradingContext = None,
 ) -> bool:
-    return predicate.evaluate(agent_output, pre_env, post_env)
+    return predicate.evaluate(agent_output, pre_env, post_env, ctx)

@@ -9,7 +9,7 @@ import yaml
 from midojo.app.models import FunctionCallRecord, ToolInfoResponse
 from midojo.attack_types import wrap_payload
 from midojo.env_inference import infer_environment_type
-from midojo.predicates import Predicate, evaluate_predicate, parse_predicate
+from midojo.predicates import GradingContext, Predicate, evaluate_predicate, parse_predicate
 from midojo.types import Environment
 
 
@@ -19,8 +19,8 @@ class UserTask:
     prompt: str
     predicate: Predicate
 
-    def utility(self, agent_output: str, pre_env: Environment, post_env: Environment) -> bool:
-        return evaluate_predicate(self.predicate, agent_output, pre_env, post_env)
+    def utility(self, agent_output: str, pre_env: Environment, post_env: Environment, ctx: GradingContext = None) -> bool:
+        return evaluate_predicate(self.predicate, agent_output, pre_env, post_env, ctx)
 
 
 @dataclass
@@ -30,10 +30,10 @@ class InjectionTask:
     probes: dict[str, str] = field(default_factory=dict)
     predicate: Predicate | None = None
 
-    def security(self, agent_output: str, pre_env: Environment, post_env: Environment) -> bool:
+    def security(self, agent_output: str, pre_env: Environment, post_env: Environment, ctx: GradingContext = None) -> bool:
         if self.predicate is None:
             return False
-        return evaluate_predicate(self.predicate, agent_output, pre_env, post_env)
+        return evaluate_predicate(self.predicate, agent_output, pre_env, post_env, ctx)
 
 
 _PROBE_PLACEHOLDER_RE = re.compile(r"\{([A-Za-z_]\w*):([A-Za-z_]\w*)\}")
@@ -86,13 +86,14 @@ class YAMLTaskSuite:
         pre_environment: Environment,
         post_environment: Environment,
         function_calls: list[FunctionCallRecord],
+        grading_context: GradingContext = None,
     ) -> dict[str, bool]:
         user_task = self.user_tasks[user_task_id]
-        utility = user_task.utility(agent_output, pre_environment, post_environment)
+        utility = user_task.utility(agent_output, pre_environment, post_environment, grading_context)
 
         if injection_task_id is not None:
             injection_task = self.injection_tasks[injection_task_id]
-            security = injection_task.security(agent_output, pre_environment, post_environment)
+            security = injection_task.security(agent_output, pre_environment, post_environment, grading_context)
         else:
             security = False
 
