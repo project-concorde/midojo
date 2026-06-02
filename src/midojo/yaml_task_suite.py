@@ -3,14 +3,13 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
 
 import yaml
 
 from midojo.app.models import FunctionCallRecord, ToolInfoResponse
 from midojo.attack_types import wrap_payload
 from midojo.env_inference import infer_environment_type
-from midojo.predicates import evaluate_predicate, parse_predicate
+from midojo.predicates import Predicate, evaluate_predicate, parse_predicate
 from midojo.types import Environment
 from midojo.verifier import Verifier
 
@@ -19,7 +18,7 @@ from midojo.verifier import Verifier
 class UserTask:
     id: str
     prompt: str
-    predicate: Any
+    predicate: Predicate
 
     def utility(
         self,
@@ -35,8 +34,8 @@ class UserTask:
 class InjectionTask:
     id: str
     description: str
+    predicate: Predicate
     probes: dict[str, str] = field(default_factory=dict)
-    predicate: Any | None = None
 
     def security(
         self,
@@ -45,8 +44,6 @@ class InjectionTask:
         post_env: Environment,
         verifiers: dict[str, Verifier] | None = None,
     ) -> bool:
-        if self.predicate is None:
-            return False
         return evaluate_predicate(self.predicate, agent_output, pre_env, post_env, verifiers)
 
 
