@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -119,7 +119,7 @@ def retrieve_evaluation(evaluation: Annotated[Evaluation, Depends(get_evaluation
 def complete_evaluation(req: CompleteRequest, evaluation: Annotated[Evaluation, Depends(get_evaluation_by_id)]):
     evaluation.agent_output = req.agent_output
     evaluation.completed = True
-    evaluation.completed_at = datetime.now(UTC).isoformat()
+    evaluation.completed_at = datetime.now(timezone.utc).isoformat()
     return {"status": "completed"}
 
 
@@ -219,7 +219,7 @@ def _append_function_call(req: CreateFunctionCallRecord, evaluation: Evaluation)
         pre_env = evaluation.pre_environment
     record = FunctionCallRecord(
         **req.model_dump(),
-        timestamp=datetime.now(UTC).isoformat(),
+        timestamp=datetime.now(timezone.utc).isoformat(),
         pre_environment=pre_env,
         post_environment=evaluation.environment.model_copy(deep=True),
     )
