@@ -134,9 +134,9 @@ def grade_evaluation(
         )
 
     verifiers = state.verifiers
-    completed_at = evaluation.completed_at or datetime.now(UTC).isoformat()
+    assert evaluation.completed_at is not None  # guaranteed by the `completed` guard above
     for verifier in verifiers.values():
-        verifier.setup(created_at=evaluation.created_at, completed_at=completed_at)
+        verifier.setup(created_at=evaluation.created_at, completed_at=evaluation.completed_at)
     for verifier in verifiers.values():
         verifier.settle()
 
