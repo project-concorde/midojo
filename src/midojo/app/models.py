@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
-from midojo.types import Environment, FunctionCallRecord
+from midojo.types import Environment
 
 # --- Run / Evaluation request/response models ---
 
@@ -14,6 +14,19 @@ class CreateFunctionCallRecord(BaseModel):
     args: dict
     result: str
     error: str | None = None
+
+
+class FunctionCallResponse(CreateFunctionCallRecord):
+    """Public shape of a recorded function call.
+
+    Excludes the internal pre/post environment snapshots that the domain
+    ``FunctionCallRecord`` carries for grading — no API client consumes them.
+    ``from_attributes`` lets it be built directly from a domain record.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    timestamp: str
 
 
 class CreateEvaluationRequest(BaseModel):
@@ -64,7 +77,7 @@ class EvaluationResponse(BaseModel):
     security: bool | None
     agent_input: str | None
     agent_output: str | None
-    function_calls: list[FunctionCallRecord]
+    function_calls: list[FunctionCallResponse]
 
 
 # --- Suite / task / tool response models ---
