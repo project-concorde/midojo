@@ -54,7 +54,7 @@ class VerificationProvider(Protocol):
 
     name: str
 
-    def parse(self, spec: Any) -> Any:
+    def parse(self, check_spec: dict) -> Any:
         """Validate/compile a raw check spec into a reusable check object."""
         ...
 
@@ -72,8 +72,8 @@ class PredicateProvider:
 
     name = "predicate"
 
-    def parse(self, spec: dict) -> Predicate:
-        return parse_predicate(spec)
+    def parse(self, check_spec: dict) -> Predicate:
+        return parse_predicate(check_spec)
 
     def evaluate(self, check: Predicate, ctx: VerificationContext) -> bool:
         return evaluate_predicate(check, ctx.agent_output, ctx.pre_environment, ctx.post_environment)

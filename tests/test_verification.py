@@ -47,8 +47,8 @@ class _ObservationProvider:
 
     name = "events"
 
-    def parse(self, spec: dict) -> str:
-        return spec["contains"]
+    def parse(self, check_spec: dict) -> str:
+        return check_spec["contains"]
 
     def evaluate(self, check: str, ctx: VerificationContext) -> bool:
         return any(check in e for e in ctx.observations.get("events", []))
@@ -77,8 +77,8 @@ class TestRegisteredProvider:
         class _Bad:
             name = "output_contains"
 
-            def parse(self, spec):
-                return spec
+            def parse(self, check_spec):
+                return check_spec
 
             def evaluate(self, check, ctx):
                 return False
