@@ -49,6 +49,8 @@ What the agent operates on is pluggable. A suite picks its backend in `suite.yam
 - **`dict`** (default) — an in-memory state model declared inline; fake tools read/write it via the control plane.
 - **`openshell`** — a sandboxed [OpenShell](https://github.com/NVIDIA/OpenShell) container where the agent runs inside: the workspace diff is the pre/post environment, and the kernel's OCSF events feed verifiers. *(Scaffold — see `openshell_backend.py`.)*
 
+`backend` is a bare name (`backend: dict`) or an object carrying infra config (`backend: {type: openshell, image: pi}`); the declared `state` is a sibling key either way.
+
 ## Weather Suite (Reference Implementation)
 
 The weather suite is a minimal working example. Have a look at `suites/weather/suite.yaml`. In there you will find:

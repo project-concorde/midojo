@@ -73,12 +73,14 @@ class DictEnvironmentBackend:
 
 # --- Backend registry + dispatch ---
 #
-# Mirrors the verification-provider registry: a suite's ``environment.backend``
-# field selects which factory builds the backend, so new backends register
-# instead of editing the suite loader. A factory receives the suite name and
-# the full ``environment`` block (so it can read its own backend-specific keys).
+# Mirrors the verifier registry. A suite's ``environment.backend`` selects the
+# backend; it is either a bare name (``backend: dict``) or an object carrying the
+# backend's infra config (``backend: {type: openshell, image: pi, ...}``). The
+# declared environment state stays a sibling key (``state``), parallel across
+# backends. A factory receives the suite name, the full ``environment`` block,
+# and the parsed backend infra config.
 
-BackendFactory = Callable[[str, dict], EnvironmentBackend]
+BackendFactory = Callable[[str, dict, dict], EnvironmentBackend]
 
 _BACKENDS: dict[str, BackendFactory] = {}
 
@@ -89,26 +91,43 @@ def register_backend(name: str, factory: BackendFactory) -> None:
     _BACKENDS[name] = factory
 
 
+def _parse_backend(env_config: dict) -> tuple[str, dict]:
+    """Resolve ``environment.backend`` into a (name, infra_config) pair."""
+    spec = env_config.get("backend", "dict")
+    if isinstance(spec, str):
+        return spec, {}
+    if isinstance(spec, dict):
+        if "type" not in spec:
+            raise ValueError("object form of 'backend' requires a 'type' field")
+        return spec["type"], {k: v for k, v in spec.items() if k != "type"}
+    raise ValueError(f"'backend' must be a name or an object with a 'type', got: {spec!r}")
+
+
 def build_backend(suite_name: str, env_config: dict) -> EnvironmentBackend:
     """Construct the backend declared by ``env_config['backend']`` (default: dict)."""
-    name = env_config.get("backend", "dict")
+    name, backend_config = _parse_backend(env_config)
     factory = _BACKENDS.get(name)
     if factory is None:
         raise ValueError(f"Unknown environment backend: {name!r}. Registered: {sorted(_BACKENDS)}")
-    return factory(suite_name, env_config)
+    return factory(suite_name, env_config, backend_config)
 
 
-def _build_dict_backend(suite_name: str, env_config: dict) -> EnvironmentBackend:
+def _build_dict_backend(suite_name: str, env_config: dict, backend_config: dict) -> EnvironmentBackend:
     if "state" not in env_config:
         raise ValueError("dict environment backend requires a 'state' field under 'environment'")
     return DictEnvironmentBackend(suite_name, env_config["state"])
 
 
-def _build_openshell_backend(suite_name: str, env_config: dict) -> EnvironmentBackend:
+def _build_openshell_backend(suite_name: str, env_config: dict, backend_config: dict) -> EnvironmentBackend:
     # Imported lazily so the openshell SDK is only needed when the backend runs.
     from midojo.openshell_backend import OpenShellBackend
 
-    return OpenShellBackend(suite_name, env_config)
+    return OpenShellBackend(
+        suite_name,
+        image=backend_config.get("image"),
+        policy=backend_config.get("policy"),
+        workspace=env_config.get("state", {}),
+    )
 
 
 register_backend("dict", _build_dict_backend)

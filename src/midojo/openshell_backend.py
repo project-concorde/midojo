@@ -49,20 +49,28 @@ class OpenShellBackend:
     Suite YAML::
 
         environment:
-          backend: openshell
-          image: pi              # OpenShell sandbox image / --from target
-          policy: pi             # optional named/inline OPA policy
-          workspace:             # seeded files (probe placeholders allowed)
+          backend:               # infra config lives inside the backend
+            type: openshell
+            image: pi            # OpenShell sandbox image / --from target
+            policy: pi           # optional named/inline OPA policy
+          state:                 # seeded workspace files (probe placeholders allowed)
             customer_report.txt: "Q4 report ... {injection_task_0:main}"
     """
 
-    def __init__(self, suite_name: str, env_config: dict) -> None:
-        if "image" not in env_config:
-            raise ValueError("openshell backend requires an 'image' field under 'environment'")
+    def __init__(
+        self,
+        suite_name: str,
+        *,
+        image: str | None,
+        policy: str | None = None,
+        workspace: dict[str, str] | None = None,
+    ) -> None:
+        if not image:
+            raise ValueError("openshell backend requires an 'image' field under 'environment.backend'")
         self._suite_name = suite_name
-        self._image: str = env_config["image"]
-        self._policy = env_config.get("policy")
-        self._workspace: dict[str, str] = env_config.get("workspace", {})
+        self._image: str = image
+        self._policy = policy
+        self._workspace: dict[str, str] = workspace or {}
         # The live sandbox handle, set by setup() for the active evaluation.
         # Evals run sequentially (see app.state), so a single handle is safe.
         self._sandbox: Any = None

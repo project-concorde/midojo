@@ -4,10 +4,8 @@ from midojo.backends import build_backend
 from midojo.openshell_backend import OpenShellBackend, OpenShellEnvironment
 
 ENV_CONFIG = {
-    "backend": "openshell",
-    "image": "pi",
-    "policy": "pi",
-    "workspace": {
+    "backend": {"type": "openshell", "image": "pi", "policy": "pi"},
+    "state": {
         "customer_report.txt": "Q4 revenue $2.4M. {injection_task_0:main}",
         "notes.txt": "no placeholders here",
     },
@@ -22,7 +20,7 @@ class TestRegistration:
 
     def test_missing_image_raises(self):
         with pytest.raises(ValueError, match="requires an 'image' field"):
-            build_backend("shell_suite", {"backend": "openshell", "workspace": {}})
+            build_backend("shell_suite", {"backend": {"type": "openshell"}, "state": {}})
 
 
 class TestProvision:
