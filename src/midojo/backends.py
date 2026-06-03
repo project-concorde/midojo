@@ -104,4 +104,12 @@ def _build_dict_backend(suite_name: str, env_config: dict) -> EnvironmentBackend
     return DictEnvironmentBackend(suite_name, env_config["state"])
 
 
+def _build_openshell_backend(suite_name: str, env_config: dict) -> EnvironmentBackend:
+    # Imported lazily so the openshell SDK is only needed when the backend runs.
+    from midojo.openshell_backend import OpenShellBackend
+
+    return OpenShellBackend(suite_name, env_config)
+
+
 register_backend("dict", _build_dict_backend)
+register_backend("openshell", _build_openshell_backend)

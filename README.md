@@ -42,6 +42,13 @@ The system has three moving parts:
 
 3. **The fake tools** — the interception layer you author for the agent you're testing. These sit between the agent and its real tools, forwarding calls upstream for authentic data and splicing in injection payloads from the control plane environment.
 
+## Environment backends
+
+What the agent operates on is pluggable. A suite picks its backend in `suite.yaml` (`environment.backend`); the engine provisions it and grades against the resulting pre/post state plus any runtime observations.
+
+- **`dict`** (default) — an in-memory state model declared inline; fake tools read/write it via the control plane.
+- **`openshell`** — a sandboxed [OpenShell](https://github.com/NVIDIA/OpenShell) container where the agent runs inside: the workspace diff is the pre/post environment, and the kernel's OCSF events feed verifiers. *(Scaffold — see `openshell_backend.py`.)*
+
 ## Weather Suite (Reference Implementation)
 
 The weather suite is a minimal working example. Have a look at `suites/weather/suite.yaml`. In there you will find:
