@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -67,12 +68,14 @@ class YAMLTaskSuite:
         pre_environment: Environment,
         post_environment: Environment,
         function_calls: list[FunctionCallRecord],
+        observations: dict[str, Any] | None = None,
     ) -> dict[str, bool]:
         ctx = VerificationContext(
             agent_output=agent_output,
             pre_environment=pre_environment,
             post_environment=post_environment,
             function_calls=function_calls,
+            observations=observations or {},
         )
 
         utility = self.user_tasks[user_task_id].check.evaluate(ctx)
