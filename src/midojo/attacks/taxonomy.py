@@ -4,10 +4,6 @@ The categorization spine for the attack library. An attack is tagged with the
 OWASP ASI risk category (or categories) it exercises, so the catalog can be
 queried and coverage measured by risk class.
 
-These definitions are lifted verbatim from Sai Chandra Pandraju's
-``agentdojo-owasp`` red-team extensions (``src/agentdojo/redteam/asi.py``) so
-the two catalogs share one taxonomy and his existing tags import directly.
-
 Reference: OWASP GenAI Security Project — Agentic Security Initiative,
 "OWASP Top 10 for Agentic Applications 2026" (CC BY-SA 4.0).
 """
