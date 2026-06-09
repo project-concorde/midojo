@@ -8,7 +8,7 @@ issue #36 for the design.
 
 from __future__ import annotations
 
-from midojo.attacks.records import AttackTechnique, AttackType
+from midojo.attacks.records import AttackTechnique, PayloadWrapper
 from midojo.attacks.registry import DEFAULT_LIBRARY, AttackLibrary, wrap_payload
 from midojo.attacks.taxonomy import ASI_DESCRIPTIONS, ASI_DETAILS, ASICategory, parse_asi_category
 
@@ -19,7 +19,7 @@ __all__ = [
     "ASICategory",
     "AttackLibrary",
     "AttackTechnique",
-    "AttackType",
+    "PayloadWrapper",
     "parse_asi_category",
     "wrap_payload",
 ]

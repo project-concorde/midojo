@@ -37,7 +37,7 @@ class AttackLibrary:
 
     def wrap_payload(self, payload: str, technique_id: str) -> str:
         """Apply the named vehicle to a payload."""
-        return self.get(technique_id).wrap(payload)
+        return self.get(technique_id).wrapper(payload)
 
 
 # The default library every suite resolves against.

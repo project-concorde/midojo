@@ -37,9 +37,9 @@ class TestProvenance:
 
 class TestAttackLibrary:
     def test_duplicate_registration_raises(self):
-        lib = AttackLibrary([AttackTechnique(id="v", wrap=lambda p: p, description="x")])
+        lib = AttackLibrary([AttackTechnique(id="v", wrapper=lambda p: p, description="x")])
         with pytest.raises(ValueError, match="already registered"):
-            lib.register(AttackTechnique(id="v", wrap=lambda p: p, description="y"))
+            lib.register(AttackTechnique(id="v", wrapper=lambda p: p, description="y"))
 
 
 class TestASITaxonomy:

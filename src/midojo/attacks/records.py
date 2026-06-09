@@ -18,7 +18,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 # A vehicle: take a payload (cargo), return the wrapped payload.
-AttackType = Callable[[str], str]
+PayloadWrapper = Callable[[str], str]
 
 
 @dataclass(frozen=True)
@@ -32,7 +32,7 @@ class AttackTechnique:
     """
 
     id: str
-    wrap: AttackType
+    wrapper: PayloadWrapper
     description: str
     source: str = "builtin"
     references: tuple[str, ...] = ()

@@ -40,13 +40,13 @@ def _ignore_previous(payload: str) -> str:
 BUILTIN_TECHNIQUES: list[AttackTechnique] = [
     AttackTechnique(
         id="verbatim",
-        wrap=_verbatim,
+        wrapper=_verbatim,
         description="Pass the payload through unwrapped (no delivery technique).",
         source="builtin",
     ),
     AttackTechnique(
         id="important_instructions",
-        wrap=_important_instructions,
+        wrapper=_important_instructions,
         description=(
             "Frame the payload as an urgent out-of-band message from the user, "
             "asking the agent to act before resuming its real task."
@@ -56,7 +56,7 @@ BUILTIN_TECHNIQUES: list[AttackTechnique] = [
     ),
     AttackTechnique(
         id="ignore_previous",
-        wrap=_ignore_previous,
+        wrapper=_ignore_previous,
         description="Classic instruction-override: tell the agent to disregard prior instructions.",
         source="builtin",
     ),
