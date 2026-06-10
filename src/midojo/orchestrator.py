@@ -16,7 +16,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from midojo.agent_client import A2AAgentClient, AgentClient, OGXResponsesClient, OpenShellPIAgentClient, PIAgentClient, SimpleHTTPAgentClient
+from midojo.agent_client import A2AAgentClient, AgentClient, OGXResponsesClient, OpenShellAgentClient, PIAgentClient, SimpleHTTPAgentClient
 from midojo.suites import get_suite, list_suites
 
 console = Console()
@@ -394,7 +394,7 @@ def main(
         # endpoint is optional — if absent, the backend uses SandboxClient.from_active_cluster()
         # which reads the mTLS bundle from ~/.config/openshell/ (set by install script or CLI).
         suite.backend.configure(endpoint=endpoint, control_url=control_url)
-        agent_client = OpenShellPIAgentClient(backend=suite.backend)
+        agent_client = OpenShellAgentClient(backend=suite.backend)
         lifecycle_backend = suite.backend
     else:
         if not agent_url:

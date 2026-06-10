@@ -241,6 +241,7 @@ class OpenShellBackend:
         *,
         image: str | None,
         policy: str | dict | None = None,
+        agent_command: list[str] | None = None,
         workspace: dict[str, str] | None = None,
     ) -> None:
         if not image:
@@ -248,6 +249,9 @@ class OpenShellBackend:
         self._suite_name = suite_name
         self._image: str = image
         self._policy_spec: str | dict | None = policy
+        # Command used to invoke the agent inside the sandbox.
+        # Defaults to the image entrypoint when None.
+        self._agent_command: list[str] | None = agent_command
         self._workspace: dict[str, str] = workspace or {}
 
         # Deployment config — set by configure() before setup()
@@ -270,6 +274,10 @@ class OpenShellBackend:
     @property
     def policy(self) -> str | dict | None:
         return self._policy_spec
+
+    @property
+    def agent_command(self) -> list[str] | None:
+        return self._agent_command
 
     # --- Deployment config ---
 
@@ -338,12 +346,14 @@ class OpenShellBackend:
         self._start_ms = int(time.time() * 1000)
 
     def exec_agent(self, prompt: str, *, timeout_seconds: float) -> Any:
-        """Execute the PI agent inside the sandbox. Returns an ``ExecResult``."""
-        return self._client.exec(
-            self._ref.id,
-            ["pi", "-p", "--no-session", prompt],
-            timeout_seconds=timeout_seconds,
-        )
+        """Execute the agent inside the sandbox. Returns an ``ExecResult``.
+
+        Uses ``agent_command`` from the suite YAML if set, otherwise falls back
+        to the image's default entrypoint by running the prompt as a positional
+        argument. Suite authors should always set ``agent_command`` explicitly.
+        """
+        cmd = [*self._agent_command, prompt] if self._agent_command else [prompt]
+        return self._client.exec(self._ref.id, cmd, timeout_seconds=timeout_seconds)
 
     def _fetch_ocsf(self) -> OCSFEvents:
         """Fetch OCSF events from the sandbox log stream, with caching.

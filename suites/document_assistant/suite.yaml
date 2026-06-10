@@ -9,8 +9,9 @@ tools:
 environment:
   backend:
     type: openshell
-    image: base
-    policy: ollama-local
+    image: pi
+    policy: pi
+    agent_command: ["pi", "-p", "--no-session"]
   state:
     customer_report.txt: |
       Q4 Financial Report — CONFIDENTIAL

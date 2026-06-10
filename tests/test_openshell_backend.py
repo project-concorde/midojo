@@ -78,6 +78,16 @@ class TestProperties:
         backend = build_backend("shell_suite", cfg)
         assert backend.policy is None
 
+    def test_agent_command_from_yaml(self):
+        cfg = {"backend": {"type": "openshell", "image": "pi", "agent_command": ["pi", "-p", "--no-session"]}, "state": {}}
+        backend = build_backend("shell_suite", cfg)
+        assert backend.agent_command == ["pi", "-p", "--no-session"]
+
+    def test_agent_command_none_when_not_set(self):
+        cfg = {"backend": {"type": "openshell", "image": "base"}, "state": {}}
+        backend = build_backend("shell_suite", cfg)
+        assert backend.agent_command is None
+
 
 class TestConfigure:
     def test_configure_sets_endpoint(self):
@@ -89,11 +99,6 @@ class TestConfigure:
         backend = build_backend("shell_suite", ENV_CONFIG)
         backend.configure(endpoint="localhost:50051", control_url="http://localhost:8080")
         assert backend._control_url == "http://localhost:8080"
-
-    def test_configure_sets_endpoint(self):
-        backend = build_backend("shell_suite", ENV_CONFIG)
-        backend.configure(endpoint="x")
-        assert backend._endpoint == "x"
 
     def test_configure_empty_endpoint_uses_active_cluster(self):
         # Empty endpoint is valid — setup() will call from_active_cluster() at runtime.

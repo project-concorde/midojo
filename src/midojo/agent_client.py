@@ -186,7 +186,7 @@ class PIAgentClient(AgentClient):
         return stdout.decode().strip()
 
 
-class OpenShellPIAgentClient(AgentClient):
+class OpenShellAgentClient(AgentClient):
     """Runs a PI coding agent inside an OpenShell sandbox.
 
     Thin wrapper — the sandbox lifecycle (create, seed, teardown) is managed by
