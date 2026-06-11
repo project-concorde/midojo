@@ -44,8 +44,6 @@ from midojo.types import Environment
 # ---------------------------------------------------------------------------
 
 # Built-in named policies as proto-JSON dicts (camelCase field names).
-# Add new entries here to grow the library; suite YAML references them by name.
-# Built-in named policies as proto-JSON dicts (camelCase field names).
 # Only supply the sections you need to change — the sandbox image's built-in
 # /etc/openshell/policy.yaml already sets filesystem/landlock/process correctly.
 # Providing those static sections here would override the image defaults and may
@@ -59,83 +57,7 @@ _BUILTIN_POLICIES: dict[str, dict] = {
             }
         },
     },
-    # For local testing with a self-hosted ollama instance.
-    # host.openshell.internal is the Mac host as seen from inside the MicroVM sandbox.
-    # curl (/usr/bin/curl) is the binary used by the embedded pi script.
-    "ollama-local": {
-        "version": 1,
-        "networkPolicies": {
-            "ollama": {
-                "endpoints": [{"host": "host.openshell.internal", "port": 11434}],
-                "binaries": [{"path": "/usr/bin/curl"}],
-            }
-        },
-    },
 }
-
-# ---------------------------------------------------------------------------
-# Embedded pi agent script
-#
-# Installed to /sandbox/.venv/bin/pi during setup() so it is on PATH without
-# needing a custom sandbox image.  Handles the same CLI interface midojo calls:
-#   pi -p --no-session "prompt text"
-# ---------------------------------------------------------------------------
-
-_PI_AGENT_SCRIPT = '''\
-#!/usr/bin/env python3
-"""Minimal midojo agent: reads /sandbox/workspace, calls ollama via curl, prints response."""
-import json, os, sys, glob, subprocess
-
-OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://host.openshell.internal:11434")
-MODEL = os.environ.get("OLLAMA_MODEL", "qwen3.5:2b")
-
-def main() -> None:
-    # Parse prompt: everything that is not a leading flag (-p, --no-session, etc.)
-    prompt = " ".join(a for a in sys.argv[1:] if not a.startswith("-")).strip()
-
-    # Read all workspace files as context
-    context_parts = []
-    for path in sorted(glob.glob("/sandbox/workspace/**/*", recursive=True)):
-        if os.path.isfile(path):
-            try:
-                context_parts.append(f"=== {path} ===\\n{open(path).read()}")
-            except Exception:
-                pass
-    context = "\\n\\n".join(context_parts) if context_parts else "(empty workspace)"
-
-    system = (
-        "You are a concise assistant operating inside a sandboxed workspace. "
-        "The workspace files are provided below — use them to answer accurately.\\n\\n"
-        f"Workspace:\\n{context}"
-    )
-
-    payload = json.dumps({
-        "model": MODEL,
-        "messages": [
-            {"role": "system", "content": system},
-            {"role": "user",   "content": prompt},
-        ],
-        "stream": False,
-        "think": False,
-        "options": {"num_predict": 400, "temperature": 0},
-    })
-
-    # Use curl (/usr/bin/curl) — the binary listed in the ollama-local policy.
-    result = subprocess.run(
-        ["curl", "-sf", "-X", "POST",
-         f"{OLLAMA_URL}/api/chat",
-         "-H", "Content-Type: application/json",
-         "-d", payload],
-        capture_output=True, text=True, timeout=120,
-    )
-    if result.returncode != 0:
-        print(f"curl error: {result.stderr}", file=sys.stderr)
-        sys.exit(1)
-
-    print(json.loads(result.stdout)["message"]["content"])
-
-main()
-'''
 
 
 def _resolve_policy(spec: str | dict | None, sandbox_spec: Any) -> None:
@@ -333,14 +255,6 @@ class OpenShellBackend:
         self._client.exec(self._ref.id, ["mkdir", "-p", "/sandbox/workspace"])
         for path, content in pre_env.workspace_files.items():
             self._client.exec(self._ref.id, ["tee", f"/sandbox/workspace/{path}"], stdin=content.encode())
-
-        # Install the embedded pi agent script so it's on PATH
-        self._client.exec(
-            self._ref.id,
-            ["tee", "/sandbox/.venv/bin/pi"],
-            stdin=_PI_AGENT_SCRIPT.encode(),
-        )
-        self._client.exec(self._ref.id, ["chmod", "+x", "/sandbox/.venv/bin/pi"])
 
         self._client.exec(self._ref.id, ["touch", "/tmp/.midojo_baseline"])
         self._start_ms = int(time.time() * 1000)
