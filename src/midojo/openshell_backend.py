@@ -164,6 +164,7 @@ class OpenShellBackend:
         image: str | None,
         policy: str | dict | None = None,
         agent_command: list[str] | None = None,
+        models_json: dict | None = None,
         workspace: dict[str, str] | None = None,
     ) -> None:
         if not image:
@@ -174,6 +175,11 @@ class OpenShellBackend:
         # Command used to invoke the agent inside the sandbox.
         # Defaults to the image entrypoint when None.
         self._agent_command: list[str] | None = agent_command
+        # Optional models.json content seeded to /sandbox/.pi/agent/models.json.
+        # Enables custom/local inference providers (ollama, vllm, etc.) without
+        # a custom image. Any non-localhost base URLs are auto-added to the
+        # sandbox network policy so the agent can reach them.
+        self._models_json: dict | None = models_json
         self._workspace: dict[str, str] = workspace or {}
 
         # Deployment config — set by configure() before setup()
@@ -200,6 +206,10 @@ class OpenShellBackend:
     @property
     def agent_command(self) -> list[str] | None:
         return self._agent_command
+
+    @property
+    def models_json(self) -> dict | None:
+        return self._models_json
 
     # --- Deployment config ---
 
@@ -251,6 +261,14 @@ class OpenShellBackend:
         self._ref = self._client.create(spec=spec)
         self._client.wait_ready(self._ref.name, timeout_seconds=120.0)
 
+        # Seed pi agent models.json (custom/local inference providers)
+        if self._models_json is not None:
+            import json as _json
+            models_bytes = _json.dumps(self._models_json, indent=2).encode()
+            self._client.exec(self._ref.id, ["mkdir", "-p", "/sandbox/.pi/agent"])
+            self._client.exec(self._ref.id, ["tee", "/sandbox/.pi/agent/models.json"], stdin=models_bytes)
+            self._apply_inference_policy_merge(openshell_pb2)
+
         # Seed workspace
         self._client.exec(self._ref.id, ["mkdir", "-p", "/sandbox/workspace"])
         for path, content in pre_env.workspace_files.items():
@@ -258,6 +276,70 @@ class OpenShellBackend:
 
         self._client.exec(self._ref.id, ["touch", "/tmp/.midojo_baseline"])
         self._start_ms = int(time.time() * 1000)
+
+    def _apply_inference_policy_merge(self, openshell_pb2: Any) -> None:
+        """Add network policy rules for any non-localhost base URLs in models_json.
+
+        Pi (node) needs to reach the inference endpoint. We extract the host and
+        port from each provider's ``baseUrl`` and merge a new policy rule into the
+        running sandbox. The merge is applied after ``wait_ready`` so the static
+        policy is already locked; only the dynamic network section is touched.
+        """
+        from urllib.parse import urlparse
+
+        from openshell._proto import sandbox_pb2  # pyright: ignore[reportMissingImports]
+
+        # Collect unique (host, port) pairs from models_json base URLs,
+        # skipping localhost (already reachable without a policy rule).
+        endpoints: list[tuple[str, int]] = []
+        for provider in (self._models_json or {}).get("providers", {}).values():
+            base_url = provider.get("baseUrl", "")
+            if not base_url:
+                continue
+            parsed = urlparse(base_url)
+            host = parsed.hostname or ""
+            port = parsed.port or (443 if parsed.scheme == "https" else 80)
+            if host and host not in ("localhost", "127.0.0.1", "::1"):
+                pair = (host, port)
+                if pair not in endpoints:
+                    endpoints.append(pair)
+
+        if not endpoints:
+            return
+
+        policy_rule = sandbox_pb2.NetworkPolicyRule()
+        for host, port in endpoints:
+            policy_rule.endpoints.add(host=host, port=port)
+        # Pi runs as a Node.js process — allow both common installation paths.
+        for node_path in ["/usr/bin/node", "/usr/local/bin/node"]:
+            policy_rule.binaries.add(path=node_path)
+
+        merge_op = openshell_pb2.PolicyMergeOperation()
+        merge_op.add_rule.rule_name = "local_inference"
+        merge_op.add_rule.rule.CopyFrom(policy_rule)
+
+        resp = self._client._stub.UpdateConfig(
+            openshell_pb2.UpdateConfigRequest(name=self._ref.name, merge_operations=[merge_op]),
+            timeout=10.0,
+        )
+        target_version = resp.version
+
+        # Poll until the sandbox supervisor loads the updated policy.
+        for _ in range(30):
+            time.sleep(1)
+            try:
+                status = self._client._stub.GetSandboxPolicyStatus(
+                    openshell_pb2.GetSandboxPolicyStatusRequest(name=self._ref.name),
+                    timeout=5.0,
+                )
+                if status.revision.version >= target_version:
+                    return
+            except Exception:
+                pass
+        import logging
+        logging.getLogger(__name__).warning(
+            "Timed out waiting for inference policy merge to load (version %d)", target_version
+        )
 
     def exec_agent(self, prompt: str, *, timeout_seconds: float) -> Any:
         """Execute the agent inside the sandbox. Returns an ``ExecResult``.

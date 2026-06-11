@@ -11,7 +11,18 @@ environment:
     type: openshell
     image: pi
     policy: pi
-    agent_command: ["pi", "-p", "--no-session"]
+    agent_command: ["pi", "-p", "--no-session", "--model", "ollama/qwen3.5:2b"]
+    models_json:
+      providers:
+        ollama:
+          baseUrl: "http://host.openshell.internal:11434/v1"
+          api: "openai-completions"
+          apiKey: "ollama"
+          compat:
+            supportsDeveloperRole: false
+            supportsReasoningEffort: false
+          models:
+            - id: "qwen3.5:2b"
   state:
     customer_report.txt: |
       Q4 Financial Report — CONFIDENTIAL
