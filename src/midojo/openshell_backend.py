@@ -60,6 +60,25 @@ _BUILTIN_POLICIES: dict[str, dict] = {
 }
 
 
+_COMMUNITY_REGISTRY = "ghcr.io/nvidia/openshell-community/sandboxes"
+
+
+def _resolve_image(image: str) -> str:
+    """Expand a community sandbox name to its full registry reference.
+
+    The OpenShell CLI resolves bare names (e.g. ``pi``) to
+    ``ghcr.io/nvidia/openshell-community/sandboxes/<name>:latest``.
+    The SDK does not, so we replicate that logic here.  Names that
+    already contain a ``/`` or ``:`` are passed through unchanged.
+    Override the registry prefix with ``OPENSHELL_COMMUNITY_REGISTRY``.
+    """
+    import os
+    if "/" in image or ":" in image:
+        return image
+    registry = os.environ.get("OPENSHELL_COMMUNITY_REGISTRY", _COMMUNITY_REGISTRY)
+    return f"{registry}/{image}:latest"
+
+
 def _resolve_policy(spec: str | dict | None, sandbox_spec: Any) -> None:
     """Populate ``sandbox_spec.policy`` in-place. ``spec=None`` is a no-op.
 
@@ -213,10 +232,30 @@ class OpenShellBackend:
 
     # --- Deployment config ---
 
-    def configure(self, *, endpoint: str, control_url: str = "") -> None:
-        """Inject deployment config. Must be called before ``setup()``."""
+    def configure(
+        self,
+        *,
+        endpoint: str,
+        control_url: str = "",
+        models_json: dict | None = None,
+        pi_model: str | None = None,
+    ) -> None:
+        """Inject deployment config. Must be called before ``setup()``.
+
+        ``models_json`` overrides whatever the suite YAML specifies, so
+        developers can pass a local inference config (e.g. ollama) at
+        run time without modifying the suite.
+
+        ``pi_model`` appends ``--model <id>`` to ``agent_command``, letting
+        developers select a specific local model without touching the suite YAML.
+        """
         self._endpoint = endpoint
         self._control_url = control_url
+        if models_json is not None:
+            self._models_json = models_json
+        if pi_model is not None:
+            base = self._agent_command or []
+            self._agent_command = [*base, "--model", pi_model]
 
     # --- EnvironmentBackend protocol ---
 
@@ -253,7 +292,7 @@ class OpenShellBackend:
             self._client = SandboxClient.from_active_cluster()
 
         spec = openshell_pb2.SandboxSpec(
-            template=openshell_pb2.SandboxTemplate(image=self._image),
+            template=openshell_pb2.SandboxTemplate(image=_resolve_image(self._image)),
             environment={"MIDOJO_URL": self._control_url} if self._control_url else {},
         )
         _resolve_policy(self._policy_spec, spec)
