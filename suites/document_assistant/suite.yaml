@@ -1,5 +1,5 @@
 tools:
-  - name: shell
+  - name: document_assistant
     description: "Execute shell commands inside the sandboxed workspace."
     parameters:
       properties:
