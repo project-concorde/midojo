@@ -353,19 +353,6 @@ async def run_benchmark(
 @click.option(
     "--openshell-endpoint", default=None, envvar="OPENSHELL_ENDPOINT", help="OpenShell gateway gRPC endpoint (openshell protocol only)."
 )
-@click.option(
-    "--pi-models-file", default=None, type=Path, envvar="PI_MODELS_FILE",
-    help="Path to a pi models.json file (see pi.dev/docs/latest/models). "
-         "Seeded into the sandbox so pi can reach local inference providers "
-         "like ollama or vllm without a custom image. Overrides any models_json "
-         "in the suite YAML (openshell protocol only).",
-)
-@click.option(
-    "--pi-model", default=None, envvar="PI_MODEL",
-    help="Model ID to pass to pi as --model (e.g. 'ollama/qwen3.5:2b'). "
-         "Appended to agent_command at runtime. Use with --pi-models-file "
-         "to select a specific local model (openshell protocol only).",
-)
 def main(
     control_url: str,
     agent_url: str | None,
@@ -378,8 +365,6 @@ def main(
     ogx_model: str | None,
     ogx_shield: str | None,
     openshell_endpoint: str | None,
-    pi_models_file: Path | None,
-    pi_model: str | None,
 ) -> None:
     for module in modules_to_load:
         importlib.import_module(module)
@@ -408,16 +393,7 @@ def main(
         endpoint = openshell_endpoint or os.environ.get("OPENSHELL_ENDPOINT", "")
         # endpoint is optional — if absent, the backend uses SandboxClient.from_active_cluster()
         # which reads the mTLS bundle from ~/.config/openshell/ (set by install script or CLI).
-        pi_models: dict | None = None
-        if pi_models_file is not None:
-            import json
-            pi_models = json.loads(pi_models_file.read_text())
-        suite.backend.configure(
-            endpoint=endpoint,
-            control_url=control_url,
-            models_json=pi_models,
-            pi_model=pi_model,
-        )
+        suite.backend.configure(endpoint=endpoint, control_url=control_url)
         agent_client = OpenShellAgentClient(backend=suite.backend)
         lifecycle_backend = suite.backend
     else:
