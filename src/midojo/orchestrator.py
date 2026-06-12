@@ -17,6 +17,7 @@ from rich.table import Table
 from rich.text import Text
 
 from midojo.agent_client import A2AAgentClient, AgentClient, OGXResponsesClient, OpenShellAgentClient, PIAgentClient, SimpleHTTPAgentClient
+from midojo.backends import EnvironmentBackend
 from midojo.suites import get_suite, list_suites
 
 console = Console()
@@ -212,14 +213,13 @@ async def run_task(
     injection_task_id: str | None,
     injections: dict[str, str],
     *,
-    backend: object | None = None,
+    backend: EnvironmentBackend | None = None,
 ) -> dict:
     """Run a single evaluation.
 
-    If ``backend`` is an ``OpenShellBackend`` (or any object with the lifecycle
-    protocol), its ``setup``/``snapshot``/``observations``/``teardown`` methods are
-    called around the agent execution step. For dict-backed suites, ``backend=None``
-    and the normal control-plane flow applies.
+    If ``backend`` carries the OpenShell lifecycle (``setup``/``snapshot``/
+    ``teardown``), those are called around the agent execution step.
+    For dict-backed suites ``backend=None`` and the normal flow applies.
     """
     async with httpx.AsyncClient(timeout=300.0) as client:
         eval_id, prompt = await _create_evaluation(
@@ -233,15 +233,11 @@ async def run_task(
             try:
                 agent_output = await agent_client.send_task(prompt)
                 post_env = await asyncio.to_thread(backend.snapshot)  # type: ignore[union-attr]
-                obs_data = await asyncio.to_thread(backend.observations)  # type: ignore[union-attr]
-                await client.put(
+                env_resp = await client.put(
                     f"{control_url}/runs/{run_id}/evaluations/{eval_id}/environment",
                     json=post_env.model_dump(),  # type: ignore[union-attr]
                 )
-                await client.post(
-                    f"{control_url}/runs/{run_id}/evaluations/{eval_id}/observations",
-                    json={"source": "openshell", "data": obs_data},
-                )
+                env_resp.raise_for_status()
             finally:
                 await asyncio.to_thread(backend.teardown)  # type: ignore[union-attr]
         else:
@@ -256,14 +252,14 @@ async def run_task(
 async def run_benchmark(
     control_url: str,
     agent_client: AgentClient,
-    agent_url: str,
+    agent_uri: str | None,
     protocol: str,
     suite: YAMLTaskSuite,
     suite_name: str,
     user_task_ids: list[str] | None,
     injection_task_ids: list[str] | None,
     logdir: Path,
-    lifecycle_backend: object | None = None,
+    lifecycle_backend: EnvironmentBackend | None = None,
 ) -> None:
     user_tasks_to_run = user_task_ids or list(suite.user_tasks.keys())
     injection_tasks_to_run: list[str]
@@ -276,7 +272,7 @@ async def run_benchmark(
         injection_tasks_to_run = []
 
     suite_info = await _fetch_suite_info(control_url)
-    _print_banner(suite_name, suite_info, agent_url, protocol, user_tasks_to_run, injection_tasks_to_run)
+    _print_banner(suite_name, suite_info, agent_uri, protocol, user_tasks_to_run, injection_tasks_to_run)
 
     run_id = await _create_run(control_url)
     console.print(f"  [dim]run[/dim] [cyan underline]{run_id}[/cyan underline]\n")
@@ -331,7 +327,12 @@ async def run_benchmark(
 
 @click.command()
 @click.option("--control-url", default="http://localhost:8080", help="URL of the benchmark MCP server control plane.")
-@click.option("--agent-url", default=None, help="URL of the agent to test (not used for --protocol openshell).")
+@click.option(
+    "--agent-uri", default=None,
+    help="Agent URI. For http/a2a/ogx: the agent's HTTP endpoint. "
+         "For pi: path to the pi extension directory. "
+         "For openshell: the gateway gRPC endpoint (omit to use the CLI-registered active gateway).",
+)
 @click.option("--suite", "suite_name", required=True, help=f"Benchmark suite name. Built-in: {', '.join(list_suites())}.")
 @click.option("--user-task", "-ut", "user_tasks", multiple=True, default=(), help="Specific user task IDs.")
 @click.option(
@@ -350,12 +351,9 @@ async def run_benchmark(
 @click.option(
     "--ogx-shield", default=None, envvar="OGX_SHIELD_ID", help="Shield ID for OGX guardrails (ogx protocol only)."
 )
-@click.option(
-    "--openshell-endpoint", default=None, envvar="OPENSHELL_ENDPOINT", help="OpenShell gateway gRPC endpoint (openshell protocol only)."
-)
 def main(
     control_url: str,
-    agent_url: str | None,
+    agent_uri: str | None,
     suite_name: str,
     user_tasks: tuple[str, ...],
     injection_tasks: tuple[str, ...],
@@ -364,23 +362,28 @@ def main(
     protocol: str,
     ogx_model: str | None,
     ogx_shield: str | None,
-    openshell_endpoint: str | None,
 ) -> None:
     for module in modules_to_load:
         importlib.import_module(module)
 
     suite = get_suite(suite_name)
     agent_client: AgentClient
-    lifecycle_backend = None
+    lifecycle_backend: EnvironmentBackend | None = None
 
     if protocol == "a2a":
-        agent_client = A2AAgentClient(agent_url)
+        if not agent_uri:
+            raise click.UsageError("--agent-uri is required for --protocol a2a")
+        agent_client = A2AAgentClient(agent_uri)
     elif protocol == "pi":
-        agent_client = PIAgentClient(agent_url, control_url)
+        if not agent_uri:
+            raise click.UsageError("--agent-uri is required for --protocol pi")
+        agent_client = PIAgentClient(agent_uri, control_url)
     elif protocol == "ogx":
+        if not agent_uri:
+            raise click.UsageError("--agent-uri is required for --protocol ogx")
         system_message = getattr(suite_module, "SYSTEM_MESSAGE", "")
         agent_client = OGXResponsesClient(
-            ogx_url=agent_url,
+            ogx_url=agent_uri,
             model=ogx_model or os.environ.get("OGX_MODEL", "litellm/llama-scout-17b"),
             mcp_server_url=os.environ.get("MCP_SERVER_URL", "http://localhost:8081/mcp"),
             instructions=system_message,
@@ -390,22 +393,20 @@ def main(
         from midojo.openshell_backend import OpenShellBackend
         if not isinstance(suite.backend, OpenShellBackend):
             raise click.UsageError("--protocol openshell requires a suite with 'backend: {type: openshell, ...}'")
-        endpoint = openshell_endpoint or os.environ.get("OPENSHELL_ENDPOINT", "")
-        # endpoint is optional — if absent, the backend uses SandboxClient.from_active_cluster()
-        # which reads the mTLS bundle from ~/.config/openshell/ (set by install script or CLI).
-        suite.backend.configure(endpoint=endpoint, control_url=control_url)
+        # --agent-uri is the gateway endpoint; omit to use the CLI-registered active gateway.
+        suite.backend.configure(endpoint=agent_uri or "", control_url=control_url)
         agent_client = OpenShellAgentClient(backend=suite.backend)
         lifecycle_backend = suite.backend
     else:
-        if not agent_url:
-            raise click.UsageError("--agent-url is required for this protocol")
-        agent_client = SimpleHTTPAgentClient(agent_url)
+        if not agent_uri:
+            raise click.UsageError("--agent-uri is required for --protocol http")
+        agent_client = SimpleHTTPAgentClient(agent_uri)
 
     asyncio.run(
         run_benchmark(
             control_url=control_url,
             agent_client=agent_client,
-            agent_url=agent_url,
+            agent_uri=agent_uri,
             protocol=protocol,
             suite=suite,
             suite_name=suite_name,

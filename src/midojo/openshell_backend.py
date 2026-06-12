@@ -202,6 +202,7 @@ class OpenShellBackend:
         # Live sandbox state — set by setup(), cleared by teardown()
         self._client: Any = None
         self._ref: Any = None
+        self._pb2: Any = None   # openshell_pb2, stored at setup() to avoid repeated lazy imports
         self._start_ms: int = 0
         self._cached_ocsf: OCSFEvents | None = None
         self._seeded_workspace: dict[str, str] = {}  # injected file contents (pre_env.workspace_files)
@@ -253,6 +254,7 @@ class OpenShellBackend:
         from openshell import SandboxClient  # pyright: ignore[reportMissingImports]
         from openshell._proto import openshell_pb2  # pyright: ignore[reportMissingImports]
 
+        self._pb2 = openshell_pb2
         self._cached_ocsf = None
         self._seeded_workspace = dict(pre_env.workspace_files)
 
@@ -297,12 +299,10 @@ class OpenShellBackend:
         if self._cached_ocsf is not None:
             return self._cached_ocsf
 
-        from openshell._proto import openshell_pb2  # pyright: ignore[reportMissingImports]
-
         messages: list[str] = []
         try:
             logs_resp = self._client._stub.GetSandboxLogs(
-                openshell_pb2.GetSandboxLogsRequest(
+                self._pb2.GetSandboxLogsRequest(
                     sandbox_id=self._ref.id,
                     since_ms=self._start_ms,
                     sources=["sandbox"],
@@ -402,6 +402,7 @@ class OpenShellBackend:
                 pass
         self._client = None
         self._ref = None
+        self._pb2 = None
         self._start_ms = 0
         self._cached_ocsf = None
         self._seeded_workspace = {}
