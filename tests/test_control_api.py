@@ -264,32 +264,3 @@ def test_create_evaluation_prompt_placeholder_collapses_for_inactive_task(client
     assert data["prompt"].startswith("Tell me the weather for this city:")
 
 
-# --- Observations ---
-
-
-def test_record_and_get_observations(client):
-    run_id = _create_run(client)
-    eval_id = _create_evaluation(client, run_id)["id"]
-
-    events = ["NET:OPEN DENIED curl -> evil.com:443"]
-    resp = client.post(
-        f"/runs/{run_id}/evaluations/{eval_id}/observations",
-        json={"source": "openshell", "data": events},
-    )
-    assert resp.status_code == 200
-
-    assert client.get(f"/runs/{run_id}/evaluations/{eval_id}/observations").json() == {"openshell": events}
-    assert state.current_eval.observations == {"openshell": events}
-
-
-def test_current_observations_keyed_by_source(client):
-    run_id = _create_run(client)
-    _create_evaluation(client, run_id)
-
-    client.post("/current/observations", json={"source": "openshell", "data": ["PROC:LAUNCH curl"]})
-    client.post("/current/observations", json={"source": "acs", "data": {"processes": ["curl"]}})
-
-    assert client.get("/current/observations").json() == {
-        "openshell": ["PROC:LAUNCH curl"],
-        "acs": {"processes": ["curl"]},
-    }

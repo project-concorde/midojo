@@ -50,17 +50,6 @@ class CompleteRequest(BaseModel):
     agent_output: str
 
 
-class RecordObservationsRequest(BaseModel):
-    """Push a runtime evidence stream for the active evaluation, keyed by source.
-
-    e.g. ``{"source": "openshell", "data": [<OCSF events>]}``. Verifiers read it
-    from ``VerificationContext.observations[source]`` at grade time.
-    """
-
-    source: str
-    data: Any
-
-
 class GradeResponse(BaseModel):
     utility: bool
     security: bool

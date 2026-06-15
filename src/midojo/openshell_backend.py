@@ -9,11 +9,10 @@ everything it does as OCSF events.
 Two grading channels:
   * **workspace diff** — seeded ``/sandbox/workspace`` files before vs. after the session —
     is the pre/post environment (graded by workspace env predicates).
-  * **OCSF events** — kernel-audited network/process/finding events — are stored in
-    both env fields (for predicate grading via ``any_of``/``all_of``) and in
-    ``observations["openshell"]`` (raw audit trail per #68). The env-field approach is
-    a pragmatic necessity: the builtin combinator calls ``parse_predicate`` recursively,
-    which doesn't dispatch to named verifiers. Fix when combinators are upgraded.
+  * **OCSF events** — kernel-audited network/process/finding events — stored on the
+    environment as typed fields (``network_calls_allowed``, ``processes_launched``, etc.)
+    for predicate grading via the ``openshell`` predicates in
+    :mod:`midojo.verifiers.openshell`.
 
 Policy:
   Suite YAML can name a built-in policy (``policy: pi``) or supply an inline dict
@@ -22,9 +21,9 @@ Policy:
   ``ParseDict`` — no direct import of ``SandboxPolicy`` needed.
 
 OCSF caching:
-  ``snapshot()`` and ``observations()`` share a single ``GetSandboxLogs`` gRPC call.
-  ``_fetch_ocsf()`` fetches and caches; subsequent calls return the cache. The cache
-  is cleared at the start of each ``setup()`` call.
+  ``_fetch_ocsf()`` fetches and caches the ``GetSandboxLogs`` response; subsequent
+  calls within the same evaluation return the cache. The cache is cleared at the
+  start of each ``setup()`` call.
 """
 
 from __future__ import annotations
@@ -172,8 +171,7 @@ class OpenShellBackend:
       3. ``setup(pre_env)`` — create sandbox, seed workspace, start timer
       4. agent executes (via ``exec_agent``)
       5. ``snapshot()`` — workspace diff + OCSF events → full ``OpenShellEnvironment``
-      6. ``observations()`` — raw OCSF dict for audit trail (cache hit from snapshot)
-      7. ``teardown()`` — delete sandbox, close client
+      6. ``teardown()`` — delete sandbox, close client
     """
 
     def __init__(
@@ -324,10 +322,7 @@ class OpenShellBackend:
         return self._cached_ocsf
 
     def snapshot(self) -> OpenShellEnvironment:  # type: ignore[override]
-        """Compute workspace diff and OCSF events, returning a fully-populated env.
-
-        Also populates the OCSF cache so ``observations()`` is a free cache hit.
-        """
+        """Compute workspace diff and OCSF events, returning a fully-populated env."""
         seeded = {f"/sandbox/workspace/{p}" for p in self._seeded_workspace}
 
         diff_result = self._client.exec(
@@ -369,22 +364,6 @@ class OpenShellBackend:
             processes_launched=[p.binary for p in ocsf.processes_launched],
             security_findings=[f.title for f in ocsf.findings],
         )
-
-    def observations(self) -> dict[str, Any]:
-        """Return raw OCSF event data for the audit trail.
-
-        Uses the cached result from ``snapshot()`` if already called; otherwise
-        fetches from the gateway (single gRPC call shared with ``snapshot()``).
-        """
-        ocsf = self._fetch_ocsf()
-        return {
-            "network_allowed": ocsf.network_allowed_endpoints,
-            "network_blocked": ocsf.network_blocked_endpoints,
-            "http_allowed": [f"{e.method} {e.url}" for e in ocsf.http_allowed],
-            "http_blocked": [f"{e.method} {e.url}" for e in ocsf.http_blocked],
-            "processes_launched": [p.binary for p in ocsf.processes_launched],
-            "findings": [f.title for f in ocsf.findings],
-        }
 
     def teardown(self) -> None:
         """Delete the sandbox and close the gRPC client."""

@@ -20,7 +20,6 @@ from ..models import (
     EvaluationSummary,
     FunctionCallResponse,
     GradeResponse,
-    RecordObservationsRequest,
     RunResponse,
 )
 from ..state import Evaluation, Run, _new_id
@@ -134,7 +133,6 @@ def grade_evaluation(
         pre_environment=evaluation.pre_environment,
         post_environment=evaluation.environment,
         function_calls=evaluation.function_calls,
-        observations=evaluation.observations,
     )
     evaluation.utility = result["utility"]
     evaluation.security = result["security"]
@@ -224,31 +222,6 @@ def record_function_call(
     return _append_function_call(req, evaluation)
 
 
-# --- Observation endpoints ---
-#
-# Runtime evidence streams (e.g. OpenShell OCSF events) the runner reads from a
-# source and records here, keyed by source — symmetric with PUT /environment.
-# Verifiers read them from VerificationContext.observations at grade time.
-
-
-def _record_observations(req: RecordObservationsRequest, evaluation: Evaluation) -> dict:
-    evaluation.observations[req.source] = req.data
-    return evaluation.observations
-
-
-@router.get("/{run_id}/evaluations/{eval_id}/observations", status_code=status.HTTP_200_OK)
-def get_observations(evaluation: Annotated[Evaluation, Depends(get_evaluation_by_id)]) -> dict:
-    return evaluation.observations
-
-
-@router.post("/{run_id}/evaluations/{eval_id}/observations", status_code=status.HTTP_200_OK)
-def record_observations(
-    req: RecordObservationsRequest,
-    evaluation: Annotated[Evaluation, Depends(get_evaluation_by_id)],
-) -> dict:
-    return _record_observations(req, evaluation)
-
-
 # --- /current mirrors ---
 
 
@@ -293,14 +266,3 @@ def record_current_function_call(
     return _append_function_call(req, evaluation)
 
 
-@current_router.get("/observations", status_code=status.HTTP_200_OK)
-def get_current_observations(evaluation: Annotated[Evaluation, Depends(get_current_evaluation)]) -> dict:
-    return evaluation.observations
-
-
-@current_router.post("/observations", status_code=status.HTTP_200_OK)
-def record_current_observations(
-    req: RecordObservationsRequest,
-    evaluation: Annotated[Evaluation, Depends(get_current_evaluation)],
-) -> dict:
-    return _record_observations(req, evaluation)
