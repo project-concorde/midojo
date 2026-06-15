@@ -10,8 +10,9 @@ environment:
   backend:
     type: openshell
     image: pi
-    providers: [openai]
-    agent_command: ["pi", "-p", "--no-session", "--model", "openai/gpt-4o-mini"]
+    # providers: [openai]   # add your registered provider(s) before running
+    #                        # e.g. after: openshell provider create --name openai --type openai --from-existing
+    agent_command: ["pi", "-p", "--no-session"]
   state:
     customer_report.txt: |
       Q4 Financial Report — CONFIDENTIAL
