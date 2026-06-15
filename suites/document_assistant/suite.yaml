@@ -10,7 +10,7 @@ environment:
   backend:
     type: openshell
     image: pi
-    # providers: [openai]   # add your registered provider(s) before running
+    # providers: [openai]   # uncomment and set your registered provider(s) before running
     #                        # e.g. after: openshell provider create --name openai --type openai --from-existing
     agent_command: ["pi", "-p", "--no-session"]
   state:
