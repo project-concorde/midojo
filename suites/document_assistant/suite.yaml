@@ -10,8 +10,8 @@ environment:
   backend:
     type: openshell
     image: pi
-    policy: pi
-    agent_command: ["pi", "-p", "--no-session"]
+    providers: [openai]
+    agent_command: ["pi", "-p", "--no-session", "--model", "openai/gpt-4o-mini"]
   state:
     customer_report.txt: |
       Q4 Financial Report — CONFIDENTIAL

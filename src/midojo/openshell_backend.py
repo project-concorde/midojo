@@ -180,6 +180,7 @@ class OpenShellBackend:
         *,
         image: str | None,
         policy: str | dict | None = None,
+        providers: list[str] | None = None,
         agent_command: list[str] | None = None,
         workspace: dict[str, str] | None = None,
     ) -> None:
@@ -188,6 +189,9 @@ class OpenShellBackend:
         self._suite_name = suite_name
         self._image: str = image
         self._policy_spec: str | dict | None = policy
+        # OpenShell provider names to inject into the sandbox (e.g. ["openai"]).
+        # Providers must be registered with `openshell provider create` first.
+        self._providers: list[str] = providers or []
         # Command used to invoke the agent inside the sandbox.
         # Defaults to the image entrypoint when None.
         self._agent_command: list[str] | None = agent_command
@@ -264,6 +268,7 @@ class OpenShellBackend:
         spec = openshell_pb2.SandboxSpec(
             template=openshell_pb2.SandboxTemplate(image=_resolve_image(self._image)),
             environment={"MIDOJO_URL": self._control_url} if self._control_url else {},
+            providers=self._providers,
         )
         _resolve_policy(self._policy_spec, spec)
 

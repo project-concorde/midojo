@@ -126,6 +126,7 @@ def _build_openshell_backend(suite_name: str, env_config: dict, backend_config: 
         suite_name,
         image=backend_config.get("image"),
         policy=backend_config.get("policy"),
+        providers=backend_config.get("providers", []),
         agent_command=backend_config.get("agent_command"),
         workspace=env_config.get("state", {}),
     )
