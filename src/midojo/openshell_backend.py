@@ -39,26 +39,6 @@ from midojo.types import Environment
 
 
 # ---------------------------------------------------------------------------
-# Policy registry
-# ---------------------------------------------------------------------------
-
-# Built-in named policies as proto-JSON dicts (camelCase field names).
-# Only supply the sections you need to change — the sandbox image's built-in
-# /etc/openshell/policy.yaml already sets filesystem/landlock/process correctly.
-# Providing those static sections here would override the image defaults and may
-# break startup if required paths are omitted.
-_BUILTIN_POLICIES: dict[str, dict] = {
-    "pi": {
-        "version": 1,
-        "networkPolicies": {
-            "claude_api": {
-                "endpoints": [{"host": "api.anthropic.com", "port": 443}],
-            }
-        },
-    },
-}
-
-
 _COMMUNITY_REGISTRY = "ghcr.io/nvidia/openshell-community/sandboxes"
 
 
@@ -78,32 +58,21 @@ def _resolve_image(image: str) -> str:
     return f"{registry}/{image}:latest"
 
 
-def _resolve_policy(spec: str | dict | None, sandbox_spec: Any) -> None:
+def _resolve_policy(spec: dict | None, sandbox_spec: Any) -> None:
     """Populate ``sandbox_spec.policy`` in-place. ``spec=None`` is a no-op.
 
     Args:
-        spec: ``None`` (no policy), a built-in name (``"pi"``), or an inline
-              proto-JSON dict matching ``SandboxPolicy`` field names (camelCase).
+        spec: ``None`` (no-op — image built-in policy applies) or a camelCase
+              proto-JSON dict matching ``SandboxPolicy`` field names.
         sandbox_spec: A ``SandboxSpec`` proto message whose ``.policy`` field will
-                      be populated. ``SandboxPolicy`` is accessed via the field
-                      directly — no import of its type needed.
+                      be populated in-place. ``SandboxPolicy`` is accessed via the
+                      field directly — no direct import of its type needed.
     """
     if spec is None:
         return
     from google.protobuf.json_format import ParseDict  # protobuf is a required dep
 
-    if isinstance(spec, str):
-        policy_dict = _BUILTIN_POLICIES.get(spec)
-        if policy_dict is None:
-            raise ValueError(
-                f"Unknown OpenShell policy {spec!r}. "
-                f"Built-in policies: {sorted(_BUILTIN_POLICIES)}. "
-                "Use an inline dict to supply a custom policy."
-            )
-    else:
-        policy_dict = spec
-
-    ParseDict(policy_dict, sandbox_spec.policy)
+    ParseDict(spec, sandbox_spec.policy)
 
 
 # ---------------------------------------------------------------------------
@@ -179,7 +148,7 @@ class OpenShellBackend:
         suite_name: str,
         *,
         image: str | None,
-        policy: str | dict | None = None,
+        policy: dict | None = None,
         providers: list[str] | None = None,
         agent_command: list[str] | None = None,
         workspace: dict[str, str] | None = None,
@@ -188,7 +157,7 @@ class OpenShellBackend:
             raise ValueError("openshell backend requires an 'image' field under 'environment.backend'")
         self._suite_name = suite_name
         self._image: str = image
-        self._policy_spec: str | dict | None = policy
+        self._policy_spec: dict | None = policy
         # OpenShell provider names to inject into the sandbox (e.g. ["openai"]).
         # Providers must be registered with `openshell provider create` first.
         self._providers: list[str] = providers or []
@@ -216,7 +185,7 @@ class OpenShellBackend:
         return self._image
 
     @property
-    def policy(self) -> str | dict | None:
+    def policy(self) -> dict | None:
         return self._policy_spec
 
     @property

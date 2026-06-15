@@ -4,12 +4,11 @@ from midojo.backends import build_backend
 from midojo.openshell_backend import (
     OpenShellBackend,
     OpenShellEnvironment,
-    _BUILTIN_POLICIES,
     _resolve_policy,
 )
 
 ENV_CONFIG = {
-    "backend": {"type": "openshell", "image": "pi", "policy": "pi"},
+    "backend": {"type": "openshell", "image": "pi"},
     "state": {
         "customer_report.txt": "Q4 revenue $2.4M. {injection_task_0:main}",
         "notes.txt": "no placeholders here",
@@ -69,14 +68,17 @@ class TestProperties:
         backend = build_backend("shell_suite", ENV_CONFIG)
         assert backend.image == "pi"
 
-    def test_policy_property(self):
+    def test_policy_none_by_default(self):
         backend = build_backend("shell_suite", ENV_CONFIG)
-        assert backend.policy == "pi"
-
-    def test_policy_none_when_not_set(self):
-        cfg = {"backend": {"type": "openshell", "image": "base"}, "state": {}}
-        backend = build_backend("shell_suite", cfg)
         assert backend.policy is None
+
+    def test_policy_inline_dict(self):
+        cfg = {"backend": {"type": "openshell", "image": "pi",
+               "policy": {"networkPolicies": {"api": {"endpoints": [{"host": "api.example.com", "port": 443}]}}}},
+               "state": {}}
+        backend = build_backend("shell_suite", cfg)
+        assert backend.policy is not None
+        assert "networkPolicies" in backend.policy
 
     def test_agent_command_from_yaml(self):
         cfg = {"backend": {"type": "openshell", "image": "pi", "agent_command": ["pi", "-p", "--no-session"]}, "state": {}}
@@ -108,53 +110,23 @@ class TestConfigure:
 
 
 class TestPolicy:
-    """_resolve_policy resolves named built-ins and inline dicts via ParseDict."""
+    """_resolve_policy accepts None (no-op) or an inline dict."""
 
     def _make_spec(self):
-        """Return a minimal fake SandboxSpec with a mutable .policy attribute."""
         from unittest.mock import MagicMock
-        spec = MagicMock()
-        # policy is a nested mock — ParseDict will try to set attributes on it,
-        # which MagicMock handles silently. For structural tests, we only need
-        # to verify that _resolve_policy doesn't raise and calls ParseDict correctly.
-        return spec
+        return MagicMock()
 
     def test_none_is_noop(self):
         spec = self._make_spec()
         _resolve_policy(None, spec)
-        spec.policy.assert_not_called()  # no mutations attempted
+        spec.policy.assert_not_called()
 
-    def test_known_builtin_does_not_raise(self):
-        # Verify dispatch reaches ParseDict: any exception except ValueError is fine
-        # (ParseDict fails on MagicMock but the error type varies by protobuf version).
+    def test_inline_dict_reaches_parse_dict(self):
         spec = self._make_spec()
-        try:
-            _resolve_policy("pi", spec)
-        except ValueError:
-            pytest.fail("Known policy name should not raise ValueError")
-        except Exception:
-            pass  # ParseDict failed on mock as expected — dispatch was correct
-
-    def test_unknown_name_raises_value_error(self):
-        spec = self._make_spec()
-        with pytest.raises(ValueError, match="Unknown OpenShell policy"):
-            _resolve_policy("nonexistent_policy", spec)
-
-    def test_inline_dict_does_not_raise_value_error(self):
-        spec = self._make_spec()
-        inline = {"networkPolicies": {"allow_all": {"endpoints": [{"host": "*", "port": 443}]}}}
+        inline = {"networkPolicies": {"allow_all": {"endpoints": [{"host": "api.example.com", "port": 443}]}}}
         try:
             _resolve_policy(inline, spec)
         except ValueError:
             pytest.fail("Inline dict should not raise ValueError")
         except Exception:
-            pass  # ParseDict failed on mock as expected — dispatch was correct
-
-    def test_builtin_pi_policy_exists(self):
-        assert "pi" in _BUILTIN_POLICIES
-        pi = _BUILTIN_POLICIES["pi"]
-        assert "networkPolicies" in pi
-        # Anthropic API endpoint is present
-        endpoints = list(pi["networkPolicies"].values())[0]["endpoints"]
-        hosts = [e["host"] for e in endpoints]
-        assert any("anthropic" in h for h in hosts)
+            pass  # ParseDict fails on MagicMock — dispatch was correct
