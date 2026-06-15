@@ -53,6 +53,14 @@ class ToolContext:
         environment[field] = value
         await self._client.put_environment(environment)
 
+    async def env_raw(self) -> dict[str, Any]:
+        """Get the entire environment as a dict."""
+        return await self._client.get_environment()
+
+    async def env_put(self, env: dict[str, Any]) -> None:
+        """Replace the entire environment."""
+        await self._client.put_environment(env)
+
     async def forward(self, tool_name: str, args: dict) -> str:
         """Forward a tool call to the upstream MCP server."""
         if self._upstream is None:

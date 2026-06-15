@@ -315,6 +315,7 @@ def main(
     elif protocol == "pi":
         agent_client = PIAgentClient(agent_url, control_url)
     elif protocol == "ogx":
+        suite_module = importlib.import_module(f"suites.{suite_name}" if "." not in suite_name else suite_name)
         system_message = getattr(suite_module, "SYSTEM_MESSAGE", "")
         agent_client = OGXResponsesClient(
             ogx_url=agent_url,

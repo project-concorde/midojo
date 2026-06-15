@@ -42,6 +42,7 @@ weather-a2a-agent = "suites.weather.a2a_agent.agent:main"
 minibank-fake-mcp-serve = "suites.minibank.a2a_agent.fake_mcp:main"
 minibank-real-mcp-serve = "suites.minibank.a2a_agent.real_mcp:main"
 minibank-a2a-agent = "suites.minibank.a2a_agent.agent:main"
+midojo-translate = "midojo.translator:main"
 
 [build-system]
 requires = ["hatchling"]
