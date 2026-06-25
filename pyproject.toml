@@ -12,7 +12,7 @@ dependencies = [
     "uvicorn>=0.34",
     "httpx>=0.28",
     "a2a-sdk>=1.0",
-    "protobuf>=5.29,<6",
+    "protobuf>=6.31",
     "rich>=13.0",
 ]
 
@@ -25,6 +25,13 @@ suites = [
     "chardet",
     "pypdf",
     "openai>=1.0",
+]
+shell = [
+    # openshell SDK must be installed separately — it's a Maturin (Rust+Python)
+    # project that requires z3 and a Rust toolchain:
+    #   brew install z3
+    #   pip install -e /path/to/OpenShell
+    "grpcio>=1.60",
 ]
 dev = [
     "pytest>=8.0.2",
@@ -53,6 +60,10 @@ packages = ["src/midojo", "suites"]
 
 [tool.uv]
 managed = true
+
+# openshell not listed here — install it manually after installing z3:
+#   brew install z3
+#   uv pip install -e ../OpenShell
 
 [tool.ruff]
 line-length = 120
