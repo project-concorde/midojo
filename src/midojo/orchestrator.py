@@ -315,7 +315,11 @@ def main(
     elif protocol == "pi":
         agent_client = PIAgentClient(agent_url, control_url)
     elif protocol == "ogx":
-        system_message = getattr(suite_module, "SYSTEM_MESSAGE", "")
+        try:
+            _suite_mod = importlib.import_module(f"suites.{suite_name}")
+        except ImportError:
+            _suite_mod = None
+        system_message = getattr(_suite_mod, "SYSTEM_MESSAGE", "")
         agent_client = OGXResponsesClient(
             ogx_url=agent_url,
             model=ogx_model or os.environ.get("OGX_MODEL", "litellm/llama-scout-17b"),
