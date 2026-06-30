@@ -22,6 +22,21 @@ from midojo.suites import get_suite, list_suites
 console = Console()
 
 
+def _resolve_system_message(suite_name: str) -> str:
+    try:
+        mod = importlib.import_module(f"suites.{suite_name}")
+    except ImportError:
+        mod = None
+    msg = getattr(mod, "SYSTEM_MESSAGE", None)
+    if not msg:
+        console.print(
+            f"[yellow]Warning:[/yellow] suite '{suite_name}' does not define SYSTEM_MESSAGE — "
+            "no system prompt will be sent to the agent."
+        )
+        return ""
+    return msg
+
+
 class TaskPair(NamedTuple):
     user_task_id: str
     injection_task_id: str
@@ -325,11 +340,7 @@ def main(
     elif protocol == "pi":
         agent_client = PIAgentClient(agent_url, control_url)
     elif protocol == "ogx":
-        try:
-            _suite_mod = importlib.import_module(f"suites.{suite_name}")
-        except ImportError:
-            _suite_mod = None
-        system_message = getattr(_suite_mod, "SYSTEM_MESSAGE", "")
+        system_message = _resolve_system_message(suite_name)
         agent_client = OGXResponsesClient(
             ogx_url=agent_url,
             model=model_name or os.environ.get("MODEL_NAME", "litellm/llama-scout-17b"),
@@ -339,11 +350,7 @@ def main(
             shield_id=ogx_shield,
         )
     elif protocol == "openai":
-        try:
-            _suite_mod = importlib.import_module(f"suites.{suite_name}")
-        except ImportError:
-            _suite_mod = None
-        system_message = getattr(_suite_mod, "SYSTEM_MESSAGE", "")
+        system_message = _resolve_system_message(suite_name)
         agent_client = OpenAIResponsesAgentClient(
             base_url=agent_url,
             model=model_name or os.environ.get("MODEL_NAME", "gpt-4o-mini"),
