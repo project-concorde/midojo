@@ -339,12 +339,18 @@ def main(
             shield_id=ogx_shield,
         )
     elif protocol == "openai":
+        try:
+            _suite_mod = importlib.import_module(f"suites.{suite_name}")
+        except ImportError:
+            _suite_mod = None
+        system_message = getattr(_suite_mod, "SYSTEM_MESSAGE", "")
         agent_client = OpenAIResponsesAgentClient(
             base_url=agent_url,
             model=model_name or os.environ.get("MODEL_NAME", "gpt-4o-mini"),
             mcp_server_url=os.environ.get("MCP_SERVER_URL", "http://localhost:8082/mcp"),
             mcp_server_label=mcp_server_label or suite_name,
             api_key=os.environ.get("OPENAI_API_KEY", "x"),
+            instructions=system_message,
         )
     else:
         agent_client = SimpleHTTPAgentClient(agent_url)
