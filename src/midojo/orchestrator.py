@@ -16,10 +16,25 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from midojo.agent_client import A2AAgentClient, AgentClient, OGXResponsesClient, PIAgentClient, SimpleHTTPAgentClient
+from midojo.agent_client import A2AAgentClient, AgentClient, OGXResponsesClient, OpenAIResponsesAgentClient, PIAgentClient, SimpleHTTPAgentClient
 from midojo.suites import get_suite, list_suites
 
 console = Console()
+
+
+def _resolve_system_message(suite_name: str) -> str:
+    try:
+        mod = importlib.import_module(f"suites.{suite_name}")
+    except ImportError:
+        mod = None
+    msg = getattr(mod, "SYSTEM_MESSAGE", None)
+    if not msg:
+        console.print(
+            f"[yellow]Warning:[/yellow] suite '{suite_name}' does not define SYSTEM_MESSAGE — "
+            "no system prompt will be sent to the agent."
+        )
+        return ""
+    return msg
 
 
 class TaskPair(NamedTuple):
@@ -285,10 +300,9 @@ async def run_benchmark(
     "--module-to-load", "-ml", "modules_to_load", multiple=True, default=(), help="Additional modules to import."
 )
 @click.option(
-    "--protocol", type=click.Choice(["http", "a2a", "pi", "ogx"]), required=True, help="Agent communication protocol."
-)
-@click.option(
-    "--ogx-model", default=None, envvar="OGX_MODEL", help="Model ID for OGX Responses API (ogx protocol only)."
+    "--protocol", type=click.Choice(["http", "a2a", "pi", "ogx", "openai"]), required=True,
+    help="Agent communication protocol. "
+         "API keys are read from env vars: OPENAI_API_KEY (openai), OGX_CLIENT_API_KEY (ogx).",
 )
 @click.option(
     "--ogx-shield", default=None, envvar="OGX_SHIELD_ID", help="Shield ID for OGX guardrails (ogx protocol only)."
@@ -297,6 +311,11 @@ async def run_benchmark(
     "--mcp-server-label", default=None, envvar="MCP_SERVER_LABEL",
     help="Label the MCP server is registered under on the agent's inference server. "
          "Defaults to the suite name. Override when the server expects a different label.",
+)
+@click.option(
+    "--model-name", default=None, envvar="MODEL_NAME",
+    help="Model ID for the Responses API (ogx and openai protocols). "
+         "Env: MODEL_NAME. Example: gpt-4o-mini, ollama/qwen3.5:2b.",
 )
 def main(
     control_url: str,
@@ -307,9 +326,9 @@ def main(
     logdir: Path,
     modules_to_load: tuple[str, ...],
     protocol: str,
-    ogx_model: str | None,
     ogx_shield: str | None,
     mcp_server_label: str | None,
+    model_name: str | None,
 ) -> None:
     for module in modules_to_load:
         importlib.import_module(module)
@@ -321,18 +340,24 @@ def main(
     elif protocol == "pi":
         agent_client = PIAgentClient(agent_url, control_url)
     elif protocol == "ogx":
-        try:
-            _suite_mod = importlib.import_module(f"suites.{suite_name}")
-        except ImportError:
-            _suite_mod = None
-        system_message = getattr(_suite_mod, "SYSTEM_MESSAGE", "")
+        system_message = _resolve_system_message(suite_name)
         agent_client = OGXResponsesClient(
             ogx_url=agent_url,
-            model=ogx_model or os.environ.get("OGX_MODEL", "litellm/llama-scout-17b"),
-            mcp_server_url=os.environ.get("MCP_SERVER_URL", "http://localhost:8081/mcp"),
+            model=model_name or os.environ.get("MODEL_NAME", "litellm/llama-scout-17b"),
+            mcp_server_url=os.environ.get("MCP_SERVER_URL", "http://localhost:8082/mcp"),
             mcp_server_label=mcp_server_label or suite_name,
             instructions=system_message,
             shield_id=ogx_shield,
+        )
+    elif protocol == "openai":
+        system_message = _resolve_system_message(suite_name)
+        agent_client = OpenAIResponsesAgentClient(
+            base_url=agent_url,
+            model=model_name or os.environ.get("MODEL_NAME", "gpt-4o-mini"),
+            mcp_server_url=os.environ.get("MCP_SERVER_URL", "http://localhost:8082/mcp"),
+            mcp_server_label=mcp_server_label or suite_name,
+            api_key=os.environ.get("OPENAI_API_KEY", "x"),
+            instructions=system_message,
         )
     else:
         agent_client = SimpleHTTPAgentClient(agent_url)
