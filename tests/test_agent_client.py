@@ -31,6 +31,16 @@ class TestOGXResponsesClient:
         )
         assert client.mcp_server_label == "midojo"
 
+    def test_mcp_server_label_override(self):
+        """mcp_server_label can be overridden from suite_name default."""
+        client = OGXResponsesClient(
+            ogx_url="http://localhost:8321",
+            model="llama-scout-17b",
+            mcp_server_url="http://localhost:8082/mcp",
+            mcp_server_label="my-custom-label",
+        )
+        assert client.mcp_server_label == "my-custom-label"
+
     def test_suite_module_import_missing(self):
         """Protocol dispatch: missing suite module falls back to empty SYSTEM_MESSAGE."""
         try:

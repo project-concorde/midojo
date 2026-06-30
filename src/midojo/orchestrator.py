@@ -293,6 +293,11 @@ async def run_benchmark(
 @click.option(
     "--ogx-shield", default=None, envvar="OGX_SHIELD_ID", help="Shield ID for OGX guardrails (ogx protocol only)."
 )
+@click.option(
+    "--mcp-server-label", default=None, envvar="MCP_SERVER_LABEL",
+    help="Label the MCP server is registered under on the agent's inference server. "
+         "Defaults to the suite name. Override when the server expects a different label.",
+)
 def main(
     control_url: str,
     agent_url: str,
@@ -304,6 +309,7 @@ def main(
     protocol: str,
     ogx_model: str | None,
     ogx_shield: str | None,
+    mcp_server_label: str | None,
 ) -> None:
     for module in modules_to_load:
         importlib.import_module(module)
@@ -324,7 +330,7 @@ def main(
             ogx_url=agent_url,
             model=ogx_model or os.environ.get("OGX_MODEL", "litellm/llama-scout-17b"),
             mcp_server_url=os.environ.get("MCP_SERVER_URL", "http://localhost:8081/mcp"),
-            mcp_server_label=suite_name,
+            mcp_server_label=mcp_server_label or suite_name,
             instructions=system_message,
             shield_id=ogx_shield,
         )
