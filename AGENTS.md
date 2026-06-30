@@ -5,14 +5,14 @@ Man-in-the-middle red teaming framework for AI agents. Tests whether agents can 
 ## Build & Test
 
 ```bash
-uv sync --extra dev          # install all deps (including ruff, pyright, pytest)
-uv run pytest                # run all unit tests
-uv run pytest tests/test_attacks.py           # single test file
+uv sync --extra dev                                   # install all deps (including ruff, pyright, pytest)
+uv run pytest                                         # run all unit tests
+uv run pytest tests/test_attacks.py                   # single test file
 uv run pytest tests/test_attacks.py -k test_verbatim  # single test
-uv run ruff check .          # lint (whole project)
-uv run ruff check --fix src/midojo/serve.py   # lint + autofix single file
-uv run ruff format .         # format (whole project)
-uv run pyright               # type check
+uv run ruff check .                                   # lint (whole project)
+uv run ruff check --fix src/midojo/serve.py           # lint + autofix single file
+uv run ruff format .                                  # format (whole project)
+uv run pyright                                        # type check
 ```
 
 - prefer `uv run` over activating a virtualenv
@@ -32,6 +32,22 @@ graph LR
 ```
 
 The fake MCP server is the man-in-the-middle: it sits between the Agent and real Tools, letting the Control Plane inject payloads into tool responses and record every call the Agent makes.
+
+`midojo-serve` (control plane) and `midojo-run` (orchestrator) are 2 separate processes:
+- the control plane is long-lived and must be running before the orchestrator starts
+- the orchestrator is short-lived — it drives one benchmark run and exit
+
+Start them in order, for example of OGX Agent:
+
+```sh
+weather-real-mcp-serve --port 8081                                                 # 1. the real MCP
+midojo-serve --suite weather --port 8080                                           # 2. Control Plane (must be UP before anything else talks to it)
+weather-fake-mcp-serve --port 8082 --upstream-url http://localhost:8081/mcp        # 3. fake tools (registers with control plane)
+LITELLM_API_KEY=... LITELLM_API_URL=... ogx run suites/weather/ogx_agent/run.yaml  # 4. Start the OGX server for the OGX Agent
+midojo-run --agent-url http://localhost:8000 --protocol a2a --suite weather        # 5. runs the benchmark (exits when done)
+```
+
+for additional examples refer to [README.md](./README.md).
 
 ## Key Concepts
 
