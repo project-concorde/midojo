@@ -285,10 +285,9 @@ async def run_benchmark(
     "--module-to-load", "-ml", "modules_to_load", multiple=True, default=(), help="Additional modules to import."
 )
 @click.option(
-    "--protocol", type=click.Choice(["http", "a2a", "pi", "ogx", "openai"]), required=True, help="Agent communication protocol."
-)
-@click.option(
-    "--ogx-model", default=None, envvar="OGX_MODEL", help="Model ID for OGX Responses API (ogx protocol only)."
+    "--protocol", type=click.Choice(["http", "a2a", "pi", "ogx", "openai"]), required=True,
+    help="Agent communication protocol. "
+         "API keys are read from env vars: OPENAI_API_KEY (openai), OGX_CLIENT_API_KEY (ogx).",
 )
 @click.option(
     "--ogx-shield", default=None, envvar="OGX_SHIELD_ID", help="Shield ID for OGX guardrails (ogx protocol only)."
@@ -312,7 +311,6 @@ def main(
     logdir: Path,
     modules_to_load: tuple[str, ...],
     protocol: str,
-    ogx_model: str | None,
     ogx_shield: str | None,
     mcp_server_label: str | None,
     model_name: str | None,
@@ -334,7 +332,7 @@ def main(
         system_message = getattr(_suite_mod, "SYSTEM_MESSAGE", "")
         agent_client = OGXResponsesClient(
             ogx_url=agent_url,
-            model=model_name or ogx_model or os.environ.get("MODEL_NAME") or os.environ.get("OGX_MODEL", "litellm/llama-scout-17b"),
+            model=model_name or os.environ.get("MODEL_NAME", "litellm/llama-scout-17b"),
             mcp_server_url=os.environ.get("MCP_SERVER_URL", "http://localhost:8082/mcp"),
             mcp_server_label=mcp_server_label or suite_name,
             instructions=system_message,
@@ -343,7 +341,7 @@ def main(
     elif protocol == "openai":
         agent_client = OpenAIResponsesAgentClient(
             base_url=agent_url,
-            model=model_name or os.environ.get("MODEL_NAME") or os.environ.get("OPENAI_MODEL", "gpt-4o-mini"),
+            model=model_name or os.environ.get("MODEL_NAME", "gpt-4o-mini"),
             mcp_server_url=os.environ.get("MCP_SERVER_URL", "http://localhost:8082/mcp"),
             mcp_server_label=mcp_server_label or suite_name,
             api_key=os.environ.get("OPENAI_API_KEY", "x"),

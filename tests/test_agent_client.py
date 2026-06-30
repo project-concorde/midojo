@@ -96,6 +96,8 @@ class TestOpenAIResponsesAgentClient:
     @pytest.mark.asyncio
     async def test_send_task_calls_responses_create(self):
         """send_task calls AsyncOpenAI.responses.create with the correct arguments."""
+        import sys
+
         client = OpenAIResponsesAgentClient(
             base_url="http://localhost:8321/v1",
             model="gpt-4o-mini",
@@ -115,7 +117,10 @@ class TestOpenAIResponsesAgentClient:
         mock_openai_instance.__aenter__ = AsyncMock(return_value=mock_openai_instance)
         mock_openai_instance.__aexit__ = AsyncMock(return_value=None)
 
-        with patch("openai.AsyncOpenAI", return_value=mock_openai_instance):
+        mock_openai_module = MagicMock()
+        mock_openai_module.AsyncOpenAI = MagicMock(return_value=mock_openai_instance)
+
+        with patch.dict(sys.modules, {"openai": mock_openai_module}):
             result = await client.send_task("What is the weather in New York?")
 
         assert result == "It is 72°F and sunny in New York."
@@ -134,6 +139,8 @@ class TestOpenAIResponsesAgentClient:
     @pytest.mark.asyncio
     async def test_send_task_passes_instructions(self):
         """instructions is forwarded to the API call."""
+        import sys
+
         client = OpenAIResponsesAgentClient(
             base_url="http://localhost:8321/v1",
             model="gpt-4o-mini",
@@ -146,7 +153,10 @@ class TestOpenAIResponsesAgentClient:
         mock_openai_instance.__aenter__ = AsyncMock(return_value=mock_openai_instance)
         mock_openai_instance.__aexit__ = AsyncMock(return_value=None)
 
-        with patch("openai.AsyncOpenAI", return_value=mock_openai_instance):
+        mock_openai_module = MagicMock()
+        mock_openai_module.AsyncOpenAI = MagicMock(return_value=mock_openai_instance)
+
+        with patch.dict(sys.modules, {"openai": mock_openai_module}):
             await client.send_task("weather?")
 
         call_kwargs = mock_openai_instance.responses.create.call_args.kwargs
