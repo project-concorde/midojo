@@ -53,7 +53,7 @@ def get_tool_definitions() -> List[dict]:
                     "account_id": {"type": "string"},
                     "limit": {
                         "type": "integer",
-                        "description": "Max number of transactions to return (1–20, default 5)",
+                        "description": "Max number of transactions to return (1-20, default 5)",
                     },
                 },
                 "required": ["account_id"],
